@@ -37,6 +37,7 @@ let 转发节点 = null            // get_forward_msg 假数据
 let 群消息文本 = '群里的话'
 let 群消息时间 = 9999999999
 let 群消息id = 9100
+let 群消息段 = null          // 给群消息用（跟私聊那个一样）
 globalThis.fetch = async (url, 选项) => {
   const 体 = JSON.parse((选项 && 选项.body) || '{}')
   const u = String(url)
@@ -57,7 +58,7 @@ globalThis.fetch = async (url, 选项) => {
       json: async () => ({
         status: 'ok', retcode: 0,
         data: { messages: [{ user_id: 123, time: 群消息时间, message_id: 群消息id, message_type: 'group',
-          message: [{ type: 'text', data: { text: 群消息文本 } }] }] },
+          message: 群消息段 || [{ type: 'text', data: { text: 群消息文本 } }] }] },
       }),
     }
   }
@@ -350,6 +351,33 @@ writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
 await new Promise((r) => setTimeout(r, 30))
 报('同一间屋 → 私聊和群各发一条（并且界面上会提示）', 发了.length === 2
   && 发了.some((x) => x.url.endsWith('/send_private_msg')) && 发了.some((x) => x.url.endsWith('/send_group_msg')), 发了.map((x) => x.url).join(','))
+
+// ⑳ 称呼分两套：私聊用「私聊称呼」，群里用「群称呼」（群里不止一个人）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: 'session-G',
+  私聊QQ: '123', 群号: '456', 转私聊: true, 转群: true,
+  称呼: '小明', 群称呼: '群里的人', NapCat: 'http://127.0.0.1:3000',
+}, null, 2), 'utf8')
+私聊消息段 = [
+  { type: 'text', data: { text: '私聊发你张图' } },
+  { type: 'image', data: { file: 'base64://iVBORw0KGgo=' } },
+]
+私聊消息id = 9030
+私聊消息时间 = Math.floor(Date.now() / 1000) + 500
+群消息文本 = '群里也发一张'
+群消息段 = [
+  { type: 'text', data: { text: '群里也发一张' } },
+  { type: 'image', data: { file: 'base64://iVBORw0KGgo=' } },
+]
+群消息id = 9031
+群消息时间 = Math.floor(Date.now() / 1000) + 500
+const 之前称呼 = 转进的.length
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 60))
+const 私聊文案 = String(转进的.at(-2)?.content?.[0]?.text || '')
+const 群文案 = String(转进的.at(-1)?.content?.[0]?.text || '')
+报('私聊的图 → 用私聊称呼「小明」', 私聊文案.includes('小明发了 1 张图'), 私聊文案.slice(0, 80))
+报('群里的图 → 用群称呼「群里的人」，不用小明的名字', 群文案.includes('群里的人发了 1 张图') && !群文案.includes('小明'), 群文案.slice(0, 80))
 
 rmSync(家, { recursive: true, force: true })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
