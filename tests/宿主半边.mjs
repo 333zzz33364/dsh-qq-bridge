@@ -123,12 +123,17 @@ const 假agent = {
   cancel: async (a) => { 取消.push(a) },
   ctx: { tools: { register: (t) => { 注册的工具.push(t); return () => { t.__卸了 = true } } } },
 }
-const 假群agent = { followup: (m) => 转进的.push(m), session: { id: 'session-G' } }
+const 假群agent = {
+  followup: (m) => 转进的.push(m),
+  session: { id: 'session-G' },
+  cancel: async () => {},
+  ctx: { tools: { register: (t) => { 注册的工具.push(t); return () => { t.__卸了 = true } } } },
+}
 const ctx = {
   on: (名字, cb) => { if (名字 === 'session/event') 监听.push(cb); return () => {} },
   effect: (fn) => { const 摘 = fn(); return () => { try { 摘 && 摘() } catch {} } },
   webServer: { register: (o) => 路由.set(o.path, o.handler) },
-  logger: { info: () => {} },
+  logger: { info: (t) => { try { (globalThis.__桥日志 ||= []).push(String(t)) } catch {} } },
   agents: { get: (id) => (String(id) === 'session-X' ? (X活着 ? 假agent : undefined) : (String(id) === 'session-G' ? (G活着 ? 假群agent : undefined) : undefined)) },
   sessions: { flush: async () => {} },
   interval: (fn) => { 轮询回调 = fn; return () => {} },
@@ -748,6 +753,37 @@ writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
 监听[0](假群agent.session, 转完(50))
 await new Promise((r) => setTimeout(r, 40))
 报('有群绑定就发得出去（老开关 转群=false 不再拦）', 发了.length === 1 && 发了[0].url.endsWith('/send_group_msg'), 发了.map((x) => x.url).join(','))
+
+// ㊲ 群消息要标「谁发的：昵称（QQ号）」；门槛工具必须声明 output（不然注册失败）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 回复门槛: true, NapCat: 'http://127.0.0.1:3000',
+  绑定: [
+    { 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' },
+    { 类型: '群', 号码: '456', 会话: 'session-G', 称呼: '群里的人', 门槛: true },
+  ],
+}, null, 2), 'utf8')
+// 先关一次门槛让旧的卸下来，再打开 → 保证这次会真的重新注册（否则注册表里还是旧对象）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '群', 号码: '456', 会话: 'session-G', 称呼: '群里的人', 门槛: false }],
+}, null, 2), 'utf8')
+await 轮询回调()
+注册的工具.length = 0
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '群', 号码: '456', 会话: 'session-G', 称呼: '群里的人', 门槛: true }],
+}, null, 2), 'utf8')
+群消息段 = [{ type: 'text', data: { text: '群里测试测试' } }]
+群消息id = 9150
+群消息时间 = Math.floor(Date.now() / 1000) + 8000
+const 之前群 = 转进的.length
+await 轮询回调()
+console.log('   [调试] 注册数=' + 注册的工具.length + '；最近日志：' + String((globalThis.__桥日志 || []).slice(-4).join(' ｜ ')).slice(0, 300))
+await new Promise((r) => setTimeout(r, 60))
+const 群文 = 转进的.length > 之前群 ? String(转进的.at(-1).content[0].text) : ''
+报('群消息带了「昵称（QQ号）：」', 群文.includes('（123）：') && 群文.includes('群里测试测试'), 群文.slice(0, 90))
+const 工具 = 注册的工具.find((x) => x.name === 'qq_reply_gate')
+报('门槛工具声明了 output（DSH 硬要求）', Boolean(工具 && 工具.output && 工具.output.schema && typeof 工具.output.render === 'function'), '注册过的工具：' + 注册的工具.map((x) => x.name + '[' + Object.keys(x).join('/') + ']').join(', '))
 
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
