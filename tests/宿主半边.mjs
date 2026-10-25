@@ -32,6 +32,8 @@ const 发了 = []
 let 私聊消息文本 = '宝宝'
 let 私聊消息时间 = 9999999999
 let 私聊消息id = 9000
+let 私聊消息段 = null          // 给「卡片 / 合并转发」用：设了就替掉默认的 text 段
+let 转发节点 = null            // get_forward_msg 假数据
 globalThis.fetch = async (url, 选项) => {
   const 体 = JSON.parse((选项 && 选项.body) || '{}')
   const u = String(url)
@@ -42,9 +44,13 @@ globalThis.fetch = async (url, 选项) => {
     return {
       json: async () => ({
         status: 'ok', retcode: 0,
-        data: { messages: [{ user_id: 123, time: 私聊消息时间, message_id: 私聊消息id, message_type: 'private', message: [{ type: 'text', data: { text: 私聊消息文本 } }] }] },
+        data: { messages: [{ user_id: 123, time: 私聊消息时间, message_id: 私聊消息id, message_type: 'private',
+          message: 私聊消息段 || [{ type: 'text', data: { text: 私聊消息文本 } }] }] },
       }),
     }
+  }
+  if (u.includes('get_forward_msg')) {
+    return { json: async () => ({ status: 'ok', retcode: 0, data: { messages: 转发节点 || [] } }) }
   }
   发了.push({ url: u, 体 })
   return { json: async () => ({ status: 'ok', retcode: 0, data: { message_id: 1 } }) }
@@ -245,6 +251,47 @@ writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
 await 轮询回调()
 await new Promise((r) => setTimeout(r, 20))
 报('轮询：总开关关 → 不转', 转进的.length === 之前转 + 1, '转进条数=' + 转进的.length)
+
+// ⑮ B站 分享卡片（json 段）→ 变成文字递进去（以前整条被当空消息丢掉）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 目标会话: 'session-X', 私聊QQ: '123', 群号: '', 转私聊: true, 转群: false, NapCat: 'http://127.0.0.1:3000',
+}, null, 2), 'utf8')
+const 卡 = { app: 'com.tencent.structmsg', meta: { news: {
+  title: '【测试】一条 B站 视频', desc: '简介在这里',
+  jumpUrl: 'https://www.bilibili.com/video/BV1xx411c7mD?share_source=qq', tag: '哔哩哔哩',
+  preview: 'https://i0.hdslb.com/x.jpg' } }, prompt: '[QQ小程序]哔哩哔哩' }
+私聊消息段 = [
+  { type: 'json', data: { data: JSON.stringify(卡) } },
+]
+私聊消息id = 9010
+私聊消息时间 = Math.floor(Date.now() / 1000) + 200
+const 之前卡 = 转进的.length
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 30))
+const 卡片正文 = 转进的.length > 之前卡 ? String(转进的.at(-1).content[0].text) : ''
+报('B站 卡片能读：转进去了', 转进的.length === 之前卡 + 1, 卡片正文.slice(0, 120))
+报('卡片正文有标题', 卡片正文.includes('一条 B站 视频'), 卡片正文)
+报('卡片正文认出是视频、带 BV 号', 卡片正文.includes('[分享视频卡片]') && 卡片正文.includes('BV1xx411c7mD'), 卡片正文)
+报('卡片正文带原链接', 卡片正文.includes('bilibili.com'), 卡片正文)
+
+// ⑯ 合并转发的聊天记录（forward 段）→ 取一次内容、压成几行
+转发节点 = [
+  { sender: { nickname: '阿甲' }, content: [{ type: 'text', data: { text: '你看这个' } }, { type: 'image', data: { url: 'http://x/1.jpg' } }] },
+  { sender: { card: '阿乙' }, content: [{ type: 'text', data: { text: '哈哈我也看了' } }] },
+]
+私聊消息段 = [
+  { type: 'forward', data: { id: 'fw-001' } },
+]
+私聊消息id = 9011
+私聊消息时间 = Math.floor(Date.now() / 1000) + 300
+const 之前转2 = 转进的.length
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 30))
+const 转发正文 = 转进的.length > 之前转2 ? String(转进的.at(-1).content[0].text) : ''
+报('合并转发能读：转进去了', 转进的.length === 之前转2 + 1, 转发正文.slice(0, 160))
+报('转发正文有「共 N 条」', 转发正文.includes('合并转发的聊天记录') && 转发正文.includes('2'), 转发正文)
+报('转发正文带昵称和内容', 转发正文.includes('阿甲') && 转发正文.includes('你看这个') && 转发正文.includes('阿乙'), 转发正文)
+报('转发里的图记成 [图片]', 转发正文.includes('[图片]'), 转发正文)
 
 rmSync(家, { recursive: true, force: true })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
