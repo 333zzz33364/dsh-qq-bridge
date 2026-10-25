@@ -583,6 +583,12 @@ writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
   ],
 }, null, 2), 'utf8')
 发了.length = 0
+// 让群那边没有新消息进来（不然轮询会把群消息也转进去、把 session-G 也标成「QQ 叫醒」）
+群消息段 = null
+群消息文本 = '旧的群消息，不该被投'
+群消息id = 9140
+群消息时间 = Math.floor(Date.now() / 1000) - 3600
+await 轮询回调()
 // 用「从没被 QQ 叫醒过」的那间（session-G）来验：不是 QQ 唤醒 → 不推
 监听[0](假群agent.session, 助手消息(42, 1, [块('text', '我在 DSH 里自己聊的')], false))
 监听[0](假群agent.session, 转完(42))
@@ -731,6 +737,17 @@ await 轮询回调()
 await new Promise((r) => setTimeout(r, 40))
 const 带块提示 = 转进的.length > 之前块 ? String(转进的.at(-1).content[0].text) : ''
 报('「只发 [QQ] 块」开着 → 转进去的消息里会说明这个约定', 带块提示.includes('[QQ]') && 带块提示.includes('块外'), 带块提示.slice(-90))
+
+// ㊱ 老的两个「转私聊/转群」开关不该再拦发送（她报的：加了群绑定，群里却收不到回复）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 转私聊: false, 转群: false, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '群', 号码: '456', 会话: 'session-G', 称呼: '群里的人' }],
+}, null, 2), 'utf8')
+发了.length = 0
+监听[0](假群agent.session, 助手消息(50, 1, [块('text', '群绑定就该能发出去')], false))
+监听[0](假群agent.session, 转完(50))
+await new Promise((r) => setTimeout(r, 40))
+报('有群绑定就发得出去（老开关 转群=false 不再拦）', 发了.length === 1 && 发了[0].url.endsWith('/send_group_msg'), 发了.map((x) => x.url).join(','))
 
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
