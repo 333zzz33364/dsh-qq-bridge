@@ -687,14 +687,15 @@ const 跑一遍 = async (配置补, id, 段) => {
 }
 const 真音频 = join(家, 'voice.silk')
 writeFileSync(真音频, Buffer.from([1, 2, 3]))
-const 转写开 = await 跑一遍({ 语音转写: true, 转写命令: 'node "' + 假ASR + '" "{file}"', 转写超时秒: 20 }, 9100, 语音段(真音频))
+const 转写命令 = (脚本) => '"' + process.execPath + '" "' + 脚本 + '" "{file}"'
+const 转写开 = await 跑一遍({ 语音转写: true, 转写命令: 转写命令(假ASR), 转写超时秒: 20 }, 9100, 语音段(真音频))
 报('语音转写开着 → 语音条变成文字', 转写开.includes('（语音）') && 转写开.includes('晚上吃什么'), 转写开)
-const 转写关 = await 跑一遍({ 语音转写: false, 转写命令: 'node "' + 假ASR + '" "{file}"' }, 9101, 语音段(真音频))
+const 转写关 = await 跑一遍({ 语音转写: false, 转写命令: 转写命令(假ASR) }, 9101, 语音段(真音频))
 报('语音转写关着 → 还是 [语音]', 转写关.includes('[语音]') && !转写关.includes('晚上吃什么'), 转写关)
-const 转写坏 = await 跑一遍({ 语音转写: true, 转写命令: 'node "' + 坏ASR + '" "{file}"', 转写超时秒: 20 }, 9102, 语音段(真音频))
+const 转写坏 = await 跑一遍({ 语音转写: true, 转写命令: 转写命令(坏ASR), 转写超时秒: 20 }, 9102, 语音段(真音频))
 报('命令失败 → 明说转写失败（不吞掉整条消息）', 转写坏.includes('转写失败') && 转写坏.includes('发你条语音'), 转写坏)
 // ⭐ 她实测报的那条：QQ 给的 file 是 https://multimedia.nt.qq.com.cn/download?appid=…
-const 转写链 = await 跑一遍({ 语音转写: true, 转写命令: 'node "' + 假ASR + '" "{file}"', 转写超时秒: 20 }, 9103,
+const 转写链 = await 跑一遍({ 语音转写: true, 转写命令: 转写命令(假ASR), 转写超时秒: 20 }, 9103,
   语音段('https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=abc&spec=0'))
 报('语音的 file 是网络地址时 → 先下载到本地再转写（她实测报的那个）', 转写链.includes('（语音）') && 转写链.includes('晚上吃什么'), 转写链)
 const 音频目录 = join(家, 'audio')
