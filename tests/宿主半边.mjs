@@ -834,6 +834,31 @@ await new Promise((r) => setTimeout(r, 30))
 报('「真停轮」开着 → 会调 agent.cancel（真的停掉这一轮）', 取消.length === 前3 + 1, '取消=' + (取消.length - 前3) + ' 工具=' + (闸3 ? '有' : '没挂上') + ' 返回=' + JSON.stringify(r3x))
 报('cancel 传 kind=user（跟用户按停止一样）', 取消.at(-1) && 取消.at(-1).kind === 'user', JSON.stringify(取消.at(-1)))
 
+// ㊵ 长回复拆段可关：关掉 = 一整段只发一条
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 长回复拆段: false, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' }],
+}, null, 2), 'utf8')
+// 先空跑一轮，把前面「真停轮」留下的静默标记消耗掉
+监听[0](会话, 助手消息(59, 1, [块('text', '（清标记）')], false))
+监听[0](会话, 转完(59))
+await new Promise((r) => setTimeout(r, 40))
+发了.length = 0
+const 多段 = ['第一段话', '第二段话', '第三段话'].join(String.fromCharCode(10) + String.fromCharCode(10))
+监听[0](会话, 助手消息(60, 1, [块('text', 多段)], false))
+监听[0](会话, 转完(60))
+await new Promise((r) => setTimeout(r, 80))
+报('「长回复拆段」关掉 → 一整段只发一条消息', 发了.length === 1 && String(发了[0].体.message[0].data.text).includes('第三段话'), '发了 ' + 发了.length + ' 条')
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 长回复拆段: true, 拆段间隔毫秒: 0, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' }],
+}, null, 2), 'utf8')
+发了.length = 0
+监听[0](会话, 助手消息(61, 1, [块('text', 多段)], false))
+监听[0](会话, 转完(61))
+await new Promise((r) => setTimeout(r, 120))
+报('「长回复拆段」开着 → 按空行拆成 3 条', 发了.length === 3, '发了 ' + 发了.length + ' 条')
+
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
