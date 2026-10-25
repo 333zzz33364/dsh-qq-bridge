@@ -10,6 +10,8 @@
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { EventEmitter } from 'node:events'
+import { setImmediate as 下一跳 } from 'node:timers/promises'
 
 const 家 = mkdtempSync(join(tmpdir(), 'qq-bridge-'))
 process.env.DSH_HOME = 家
@@ -112,19 +114,21 @@ const 正文 = 模.提取正文({ content: [块('reasoning', '想一下'), 块('
 const 监听 = []
 const 路由 = new Map()
 const 转进的 = []
+const 入站事件 = new EventEmitter()
+const 记录转入 = (m) => { 转进的.push(m); 入站事件.emit('followup', m) }
 let 轮询回调 = null
 const 注册的工具 = []
 let X活着 = true      // 可以让某间会话「死掉 / 点活」，用来测「会话死了消息不丢」
 let G活着 = true
 const 取消 = []
 const 假agent = {
-  followup: (m) => 转进的.push(m),
+  followup: 记录转入,
   session: { id: 'session-X' },
   cancel: async (a) => { 取消.push(a) },
   ctx: { tools: { register: (t) => { 注册的工具.push(t); return () => { t.__卸了 = true } } } },
 }
 const 假群agent = {
-  followup: (m) => 转进的.push(m),
+  followup: 记录转入,
   session: { id: 'session-G' },
   cancel: async () => {},
   ctx: { tools: { register: (t) => { 注册的工具.push(t); return () => { t.__卸了 = true } } } },
@@ -639,7 +643,10 @@ await new Promise((r) => setTimeout(r, 40))
 
 // ㉚ 语音转写：语音条 → 交给外部命令 → 变成文字（插件自己不带模型）
 const 假ASR = join(家, '假asr.js')
-writeFileSync(假ASR, "process.stdout.write('这条语音说的是：晚上吃什么')" + String.fromCharCode(10), 'utf8')
+// 可控的合成子进程延迟，覆盖启动耗时超过旧 300ms 窗口的情况。
+const ASR延迟 = Number(process.env.QQ_TEST_ASR_DELAY_MS || 0)
+if (!Number.isFinite(ASR延迟) || ASR延迟 < 0 || ASR延迟 > 3000) throw new Error('QQ_TEST_ASR_DELAY_MS 必须在 0..3000')
+writeFileSync(假ASR, `setTimeout(() => process.stdout.write('这条语音说的是：晚上吃什么'), ${ASR延迟})\n`, 'utf8')
 const 坏ASR = join(家, '坏asr.js')
 writeFileSync(坏ASR, "process.stderr.write('模型没装'); process.exit(1)" + String.fromCharCode(10), 'utf8')
 const 语音段 = (f) => [
@@ -652,13 +659,31 @@ const 跑一遍 = async (配置补, id, 段) => {
     绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' }],
     ...配置补,
   }, null, 2), 'utf8')
-  私聊消息段 = 段
+  const 标记 = `[voice-case:${id}]`
+  私聊消息段 = [{ type: 'text', data: { text: 标记 } }, ...段]
   私聊消息id = id
   私聊消息时间 = Math.floor(Date.now() / 1000) + 4000 + (id % 100)
-  const 前 = 转进的.length
-  await 轮询回调()
-  await new Promise((r) => setTimeout(r, 300))
-  return 转进的.length > 前 ? String(转进的.at(-1).content[0].text) : ''
+  // timer 回调是 fire-and-forget；await 它不会等 ASR/入站完成。
+  // 在触发前订阅精确 case 的 followup，避免上一条迟到后满足下一条断言。
+  const 完成 = new Promise((resolve, reject) => {
+    const 接到 = (m) => {
+      const text = String(m.content[0].text)
+      if (!text.includes(标记)) return
+      clearTimeout(超时)
+      入站事件.off('followup', 接到)
+      resolve(text)
+    }
+    const 超时 = setTimeout(() => {
+      入站事件.off('followup', 接到)
+      reject(new Error(`等待 ${标记} followup 超时（5s）`))
+    }, 5000)
+    入站事件.on('followup', 接到)
+  })
+  轮询回调()
+  const text = await 完成
+  // 排空 followup 后的 Promise continuation（含落水位），再改下一条配置。
+  await 下一跳()
+  return text
 }
 const 真音频 = join(家, 'voice.silk')
 writeFileSync(真音频, Buffer.from([1, 2, 3]))
