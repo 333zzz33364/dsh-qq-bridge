@@ -792,6 +792,19 @@ const 群文 = 转进的.length > 之前群 ? String(转进的.at(-1).content[0]
 const 工具 = 注册的工具.find((x) => x.name === 'qq_reply_gate')
 报('门槛工具声明了 output（DSH 硬要求）', Boolean(工具 && 工具.output && 工具.output.schema && typeof 工具.output.render === 'function'), '注册过的工具：' + 注册的工具.map((x) => x.name + '[' + Object.keys(x).join('/') + ']').join(', '))
 
+// ㊴ 0.9.8（她 20:04 的截图）：parameters 必须是完整 JSON Schema，不能是「属性表」，
+//     否则上游报 `Invalid schema for function 'qq_reply_gate': ... got 'type: null'`，整间会话一句话都说不了
+{
+  const 参 = 工具 && 工具.parameters
+  报('门槛的 parameters 是 JSON Schema（type=object）', Boolean(参 && 参.type === 'object'), JSON.stringify(参).slice(0, 160))
+  报('parameters.properties 里有 reply / reason',
+    Boolean(参 && 参.properties && 参.properties.reply && 参.properties.reason), JSON.stringify(参 && 参.properties).slice(0, 160))
+  报('required 是数组且包含 reply',
+    Boolean(参 && Array.isArray(参.required) && 参.required.includes('reply')), JSON.stringify(参 && 参.required))
+  报('属性上没再写 required:true（老的错写法）',
+    Boolean(参 && 参.properties && !('required' in (参.properties.reply || {}))), JSON.stringify(参 && 参.properties && 参.properties.reply).slice(0, 160))
+}
+
 // ㊳ 门槛的 reply 用字符串 "false" 也要认（模型常这么传）
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
   总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',

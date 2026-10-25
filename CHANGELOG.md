@@ -1,3 +1,13 @@
+## 0.9.8 — 2026-10-25
+
+**⚠️ 严重：门槛工具的 parameters 写错格式，导致整间会话每一轮都 INVALID_REQUEST**
+
+- 🐛 她 20:04 发来的截图：`Invalid schema for function 'qq_reply_gate': schema must be a JSON Schema of 'type: "object"', got 'type: null'`，连着好几轮「本轮运行失败」——**一句话都说不出去**。
+- 🔍 真因：0.9.2 补 `output` 的时候，`parameters` 还是「属性表」写法（`{ reply: {...}, reason: {...} }`）。别的插件没踩，是因为它们用 `hostDeps.defineTool` 会把属性表转成 JSON Schema；这里直连 `ctx.tools.register`，**属性表被原样交给上游，schema 就成了 null**。
+- ✅ 改成完整 JSON Schema：`type: 'object'` + `properties` + `required: ['reply']` + `additionalProperties: false`。
+- ✅ 自测加 4 项，专门盯这个：parameters 必须是 object schema、属性齐、required 是数组、属性上不许再写 `required: true`。
+- 自测：宿主半边 **103 项** + 网页 4 项。
+
 ## 0.9.7 — 2026-10-25
 
 **设置页「试一句」老是说「这间会话没绑任何 QQ 聊天」—— 修好了**
