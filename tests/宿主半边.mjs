@@ -38,6 +38,7 @@ let 群消息文本 = '群里的话'
 let 群消息时间 = 9999999999
 let 群消息id = 9100
 let 群消息段 = null          // 给群消息用（跟私聊那个一样）
+let 内层节点 = null           // 「转发里套转发」用的内层节点
 globalThis.fetch = async (url, 选项) => {
   const 体 = JSON.parse((选项 && 选项.body) || '{}')
   const u = String(url)
@@ -63,7 +64,9 @@ globalThis.fetch = async (url, 选项) => {
     }
   }
   if (u.includes('get_forward_msg')) {
-    return { json: async () => ({ status: 'ok', retcode: 0, data: { messages: 转发节点 || [] } }) }
+    const 是谁 = JSON.stringify(体)
+    const 内层 = 是谁.includes('fw-inner')
+    return { json: async () => ({ status: 'ok', retcode: 0, data: { messages: (内层 ? 内层节点 : 转发节点) || [] } }) }
   }
   发了.push({ url: u, 体 })
   return { json: async () => ({ status: 'ok', retcode: 0, data: { message_id: 1 } }) }
@@ -290,7 +293,7 @@ const 卡片正文 = 转进的.length > 之前卡 ? String(转进的.at(-1).cont
 
 // ⑯ 合并转发的聊天记录（forward 段）→ 取一次内容、压成几行
 转发节点 = [
-  { sender: { nickname: '阿甲' }, content: [{ type: 'text', data: { text: '你看这个' } }, { type: 'image', data: { url: 'http://x/1.jpg' } }] },
+  { sender: { nickname: '阿甲' }, content: [{ type: 'text', data: { text: '你看这个' } }, { type: 'image', data: { file: 'base64://iVBORw0KGgo=' } }] },
   { sender: { card: '阿乙' }, content: [{ type: 'text', data: { text: '哈哈我也看了' } }] },
 ]
 私聊消息段 = [
@@ -378,6 +381,35 @@ const 私聊文案 = String(转进的.at(-2)?.content?.[0]?.text || '')
 const 群文案 = String(转进的.at(-1)?.content?.[0]?.text || '')
 报('私聊的图 → 用私聊称呼「小明」', 私聊文案.includes('小明发了 1 张图'), 私聊文案.slice(0, 80))
 报('群里的图 → 用群称呼「群里的人」，不用小明的名字', 群文案.includes('群里的人发了 1 张图') && !群文案.includes('小明'), 群文案.slice(0, 80))
+
+// ㉑ 转发里套转发：要展开（最多 2 层）
+内层节点 = [
+  { sender: { nickname: '阿丙' }, content: [{ type: 'text', data: { text: '里层的一句话' } }] },
+  { sender: { nickname: '阿丁' }, content: [{ type: 'image', data: { url: 'http://x/2.jpg' } }] },
+]
+转发节点 = [
+  { sender: { nickname: '阿甲' }, content: [{ type: 'text', data: { text: '你看这个' } }, { type: 'image', data: { file: 'base64://iVBORw0KGgo=' } }] },
+  { sender: { nickname: '阿乙' }, content: [{ type: 'forward', data: { id: 'fw-inner' } }] },
+]
+私聊消息段 = [{ type: 'forward', data: { id: 'fw-outer' } }]
+私聊消息id = 9040
+私聊消息时间 = Math.floor(Date.now() / 1000) + 600
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: 'session-G',
+  私聊QQ: '123', 群号: '456', 转私聊: true, 转群: true, 收图: true, 收图最多: 4, NapCat: 'http://127.0.0.1:3000',
+}, null, 2), 'utf8')
+const 之前嵌套 = 转进的.length
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 60))
+const 嵌套正文 = String(转进的.at(-1)?.content?.[0]?.text || '')
+报('转发里套转发会展开', 嵌套正文.includes('里层的一句话'), 嵌套正文.slice(0, 200))
+报('内层的人名也在', 嵌套正文.includes('阿丙'), 嵌套正文.slice(0, 200))
+报('内层的图也标了 [图片]', 嵌套正文.includes('[图片]'), 嵌套正文.slice(0, 200))
+
+// ㉒ 转发里的图跟着「收图」开关走
+const 嵌套文案 = String(转进的.at(-1)?.content?.[0]?.text || '')
+报('收图开着 → 第一层的图会被收进来（文案里有「发了 1 张图」）', 嵌套文案.includes('发了 1 张图'), 嵌套文案.slice(-120))
+报('内层的图不重复收（只收第一层）', !嵌套文案.includes('发了 2 张图'), 嵌套文案.slice(-120))
 
 rmSync(家, { recursive: true, force: true })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
