@@ -785,6 +785,23 @@ const 群文 = 转进的.length > 之前群 ? String(转进的.at(-1).content[0]
 const 工具 = 注册的工具.find((x) => x.name === 'qq_reply_gate')
 报('门槛工具声明了 output（DSH 硬要求）', Boolean(工具 && 工具.output && 工具.output.schema && typeof 工具.output.render === 'function'), '注册过的工具：' + 注册的工具.map((x) => x.name + '[' + Object.keys(x).join('/') + ']').join(', '))
 
+// ㊳ 门槛的 reply 用字符串 "false" 也要认（模型常这么传）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人', 门槛: true }],
+}, null, 2), 'utf8')
+注册的工具.length = 0
+私聊消息段 = null
+私聊消息文本 = '字符串 false 的测试'
+私聊消息id = 9160
+私聊消息时间 = Math.floor(Date.now() / 1000) + 9000
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 60))
+const 闸2 = 注册的工具.find((x) => x.name === 'qq_reply_gate')
+const 前取 = 取消.length
+const r2s = 闸2 ? await 闸2.execute({ reply: 'false', reason: '字符串形式' }) : { ok: false, 说: '没挂上' }
+报('reply 传字符串 "false" 也能停掉这一轮', 取消.length === 前取 + 1, JSON.stringify(r2s))
+
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
