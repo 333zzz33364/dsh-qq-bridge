@@ -667,6 +667,23 @@ const asr状态 = 存储[0]
 // ⚠ 不在这里真的点「装依赖」—— 那会起 pip，把临时目录占住、清理不掉。
 //   这里只验「路有、状态能取」，真装交给插件页上的按钮（人工点）。
 
-try { rmSync(家, { recursive: true, force: true, maxRetries: 3 }) } catch (error) { /* 装依赖进程可能还占着，忽略 */ }
+// ㉜ 旧消息不补投（会话关着攒下来的，别一打开就冒出来）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 补投窗口分: 10, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' }],
+}, null, 2), 'utf8')
+X活着 = false
+私聊消息段 = null
+私聊消息文本 = '半小时前发的'
+私聊消息id = 9110
+私聊消息时间 = Math.floor(Date.now() / 1000) - 30 * 60   // 半小时前
+const 之前旧 = 转进的.length
+await 轮询回调()
+X活着 = true
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 60))
+报('超过补投窗口的旧消息：不再补投（不会一打开就冒一条旧回复）', 转进的.length === 之前旧, '转进=' + 转进的.length)
+
+rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
