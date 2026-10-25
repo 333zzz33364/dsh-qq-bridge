@@ -78,7 +78,7 @@ const 模 = await import(new URL('../lib/host.js', import.meta.url).href + '?v='
 
 // ---------- 纯函数 ----------
 报('名字导出', 模.name === 'qq-bridge', 模.name)
-报('inject = agents + sessions + sessionTitle + webServer + timer + workspaceRegistry + attachments', Array.isArray(模.inject) && 模.inject.join() === 'agents,sessions,sessionTitle,webServer,timer,workspaceRegistry,attachments')
+报('inject = agents + sessions + sessionTitle + webServer + timer + workspaceRegistry + attachments + tools', Array.isArray(模.inject) && 模.inject.join() === 'agents,sessions,sessionTitle,webServer,timer,workspaceRegistry,attachments,tools', String(模.inject))
 
 const 块 = (type, text) => ({ type, text })
 const 正文 = 模.提取正文({ content: [块('reasoning', '想一下'), 块('text', '第一条\n第二条'), 块('image', ''), 块('text', '第三条')] })
@@ -110,7 +110,14 @@ const 监听 = []
 const 路由 = new Map()
 const 转进的 = []
 let 轮询回调 = null
-const 假agent = { followup: (m) => 转进的.push(m), session: { id: 'session-X' } }
+const 注册的工具 = []
+const 取消 = []
+const 假agent = {
+  followup: (m) => 转进的.push(m),
+  session: { id: 'session-X' },
+  cancel: async (a) => { 取消.push(a) },
+  ctx: { tools: { register: (t) => { 注册的工具.push(t); return () => { t.__卸了 = true } } } },
+}
 const 假群agent = { followup: (m) => 转进的.push(m), session: { id: 'session-G' } }
 const ctx = {
   on: (名字, cb) => { if (名字 === 'session/event') 监听.push(cb); return () => {} },
@@ -460,6 +467,46 @@ writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
 await 轮询回调()
 await new Promise((r) => setTimeout(r, 40))
 报('没填令牌时不带 Authorization（老 NapCat 零变化）', 请求头们.length > 0 && 请求头们.every((x) => !x.headers.authorization), JSON.stringify(请求头们.map((x) => x.headers.authorization || '(无)')))
+
+// ㉖ 回复门槛：挂工具 / 只在被 QQ 叫醒时能关闸 / 关掉就卸下来
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: '', 私聊QQ: '123', 群号: '',
+  转私聊: true, 转群: false, 回复门槛: true, NapCat: 'http://127.0.0.1:3000',
+}, null, 2), 'utf8')
+私聊消息段 = null
+私聊消息文本 = '群里有人说：今天好热'
+私聊消息id = 9070
+私聊消息时间 = Math.floor(Date.now() / 1000) + 1000
+注册的工具.length = 0
+取消.length = 0
+await 轮询回调()          // 心跳：挂工具 + 拉消息
+await new Promise((r) => setTimeout(r, 40))
+报('门槛开着 → 给绑了 QQ 的会话挂上 qq_reply_gate', 注册的工具.some((x) => x.name === 'qq_reply_gate'), 注册的工具.map((x) => x.name).join(','))
+const 闸 = 注册的工具.find((x) => x.name === 'qq_reply_gate')
+// ① 还没被 QQ 叫醒过（上面刚被叫醒过一轮，所以先换一间屋测）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: '', 私聊QQ: '123', 群号: '',
+  转私聊: true, 转群: false, 回复门槛: true, NapCat: 'http://127.0.0.1:3000',
+}, null, 2), 'utf8')
+const 前取消 = 取消.length
+await new Promise((r) => setTimeout(r, 5))
+// ② 正常判定：reply=false → 取消这一轮
+const r1 = await 闸.execute({ reply: false, reason: '在跟别人聊' })
+报('reply=false → 调了 agent.cancel（停掉这一轮）', 取消.length === 前取消 + 1, JSON.stringify(r1))
+报('取消理由标成 user（跟用户自己点停一样）', 取消.at(-1) && 取消.at(-1).kind === 'user', JSON.stringify(取消.at(-1)))
+// ③ 再调一次（不在 QQ 唤醒窗口内）→ 拒绝
+const r2 = await 闸.execute({ reply: false })
+报('不是 QQ 叫醒的那一轮 → 门槛不生效（拒绝）', r2.ok === false, JSON.stringify(r2))
+// ④ 关掉开关 → 下一跳卸下来
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: '', 私聊QQ: '123', 群号: '',
+  转私聊: true, 转群: false, 回复门槛: false, NapCat: 'http://127.0.0.1:3000',
+}, null, 2), 'utf8')
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 40))
+报('门槛关掉 → 工具被卸下', 闸.__卸了 === true, String(闸.__卸了))
+const r3 = await 闸.execute({ reply: false })
+报('门槛关着时调用 → 明确说"没开"', r3.ok === false && String(r3.说).includes('没开'), JSON.stringify(r3))
 
 rmSync(家, { recursive: true, force: true })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
