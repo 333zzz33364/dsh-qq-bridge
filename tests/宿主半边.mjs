@@ -646,6 +646,15 @@ const 转写关 = await 跑一遍({ 语音转写: false, 转写命令: 'node "' 
 const 转写坏 = await 跑一遍({ 语音转写: true, 转写命令: 'node "' + 坏ASR + '" "{file}"', 转写超时秒: 20 }, 9102, 语音段('C:/x/voice3.silk'))
 报('命令失败 → 明说转写失败（不吞掉整条消息）', 转写坏.includes('转写失败') && 转写坏.includes('发你条语音'), 转写坏)
 
-rmSync(家, { recursive: true, force: true })
+// ㉛ 语音依赖：状态接口（没装好时是「未就绪」）+ 一键装立刻返回不挂住请求
+存储.length = 0
+await 路由.get('/dsh-qq-bridge/asr-status')([], fakeRes)
+const asr状态 = 存储[0]
+报('/asr-status 能回状态（没装时未就绪）', asr状态 && asr状态.ok === true && asr状态.就绪 === false && Array.isArray(asr状态.步骤), JSON.stringify({ ok: asr状态 && asr状态.ok, 就绪: asr状态 && asr状态.就绪 }))
+报('状态里带了「装好之后该填的命令」（含 asr_cli.py 和 {file}）', String(asr状态.命令 || '').includes('asr_cli.py') && String(asr状态.命令 || '').includes('{file}'), String(asr状态.命令))
+// ⚠ 不在这里真的点「装依赖」—— 那会起 pip，把临时目录占住、清理不掉。
+//   这里只验「路有、状态能取」，真装交给插件页上的按钮（人工点）。
+
+try { rmSync(家, { recursive: true, force: true, maxRetries: 3 }) } catch (error) { /* 装依赖进程可能还占着，忽略 */ }
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
