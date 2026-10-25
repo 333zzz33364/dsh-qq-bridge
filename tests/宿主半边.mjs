@@ -411,6 +411,27 @@ const 嵌套文案 = String(转进的.at(-1)?.content?.[0]?.text || '')
 报('收图开着 → 第一层的图会被收进来（文案里有「发了 1 张图」）', 嵌套文案.includes('发了 1 张图'), 嵌套文案.slice(-120))
 报('内层的图不重复收（只收第一层）', !嵌套文案.includes('发了 2 张图'), 嵌套文案.slice(-120))
 
+// ㉓ 里外分开：内层转发另起一段（不像上一版挤成一坨）
+const 嵌套行们 = 嵌套文案.split(String.fromCharCode(10))
+报('外层是一行一句（阿甲那行单独一行）', 嵌套行们.some((l) => l.includes('阿甲：') && !l.includes('里层的一句话')), JSON.stringify(嵌套行们.slice(0, 4)))
+报('内层另起一段、有缩进', 嵌套行们.some((l) => /^\s{4,}\[合并转发的聊天记录/.test(l)), JSON.stringify(嵌套行们))
+报('内层的人自己占一行', 嵌套行们.some((l) => l.includes('阿丙：里层的一句话')), JSON.stringify(嵌套行们))
+
+// ㉔ 一条转发里套了两个转发 → 两段各自展开
+内层节点 = [{ sender: { nickname: '丙一' }, content: [{ type: 'text', data: { text: '第一段内容' } }] }]
+转发节点 = [
+  { sender: { nickname: '甲' }, content: [{ type: 'forward', data: { id: 'fw-inner' } }] },
+  { sender: { nickname: '乙' }, content: [{ type: 'forward', data: { id: 'fw-inner-2' } }] },
+]
+私聊消息段 = [{ type: 'forward', data: { id: 'fw-outer2' } }]
+私聊消息id = 9050
+私聊消息时间 = Math.floor(Date.now() / 1000) + 700
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 60))
+const 两段正文 = String(转进的.at(-1)?.content?.[0]?.text || '')
+const 段头数 = (两段正文.match(/\[合并转发的聊天记录 · 共/g) || []).length
+报('两个嵌套各展开成一段（一共 3 个「聊天记录」标题：外层 + 两个内层）', 段头数 === 3, '标题数=' + 段头数 + ' :: ' + 两段正文)
+
 rmSync(家, { recursive: true, force: true })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
