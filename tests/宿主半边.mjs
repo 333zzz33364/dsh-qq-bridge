@@ -608,6 +608,9 @@ writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
 群消息时间 = Math.floor(Date.now() / 1000) - 3600
 await 轮询回调()
 // 用「从没被 QQ 叫醒过」的那间（session-G）来验：不是 QQ 唤醒 → 不推
+// ⭐ 1.0.1 起还有「尾巴」：明确清掉，才是真的「没被 QQ 叫醒过」
+桥.测试.清唤醒(假群agent.session.id)
+桥.测试.清尾巴(假群agent.session.id)
 监听[0](假群agent.session, 助手消息(42, 1, [块('text', '我在 DSH 里自己聊的')], false))
 监听[0](假群agent.session, 转完(42))
 await new Promise((r) => setTimeout(r, 30))
