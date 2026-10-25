@@ -111,6 +111,8 @@ const 路由 = new Map()
 const 转进的 = []
 let 轮询回调 = null
 const 注册的工具 = []
+let X活着 = true      // 可以让某间会话「死掉 / 点活」，用来测「会话死了消息不丢」
+let G活着 = true
 const 取消 = []
 const 假agent = {
   followup: (m) => 转进的.push(m),
@@ -124,7 +126,7 @@ const ctx = {
   effect: (fn) => { const 摘 = fn(); return () => { try { 摘 && 摘() } catch {} } },
   webServer: { register: (o) => 路由.set(o.path, o.handler) },
   logger: { info: () => {} },
-  agents: { get: (id) => (String(id) === 'session-X' ? 假agent : (String(id) === 'session-G' ? 假群agent : undefined)) },
+  agents: { get: (id) => (String(id) === 'session-X' ? (X活着 ? 假agent : undefined) : (String(id) === 'session-G' ? (G活着 ? 假群agent : undefined) : undefined)) },
   sessions: { flush: async () => {} },
   interval: (fn) => { 轮询回调 = fn; return () => {} },
   get: () => undefined,
@@ -594,6 +596,25 @@ await new Promise((r) => setTimeout(r, 40))
 监听[0](会话, 转完(43))
 await new Promise((r) => setTimeout(r, 30))
 报('「只回 QQ 唤醒」开着：QQ 叫醒的那一轮 → 正常回', 发了.length === 1, String(发了.length))
+
+// ㉙ 会话当时是死的 → 这条不丢；把它点活之后，下一跳自己就转进去了，也不会跑到别的会话
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, onlyThis: true, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' }],
+}, null, 2), 'utf8')
+X活着 = false
+私聊消息段 = null
+私聊消息文本 = '这间屋死着的时候说的话'
+私聊消息id = 9090
+私聊消息时间 = Math.floor(Date.now() / 1000) + 3000
+const 之前死 = 转进的.length
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 40))
+报('会话是死的：这条不会转进去（也不假装转过）', 转进的.length === 之前死, '转进=' + 转进的.length)
+X活着 = true
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 40))
+报('把它点活之后：下一跳自己就转进去了（不丢）', 转进的.length === 之前死 + 1 && JSON.stringify(转进的.at(-1)?.content?.[0]?.text || '').includes('死着的时候说的话'), JSON.stringify(转进的.at(-1)?.content?.[0]?.text))
 
 rmSync(家, { recursive: true, force: true })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
