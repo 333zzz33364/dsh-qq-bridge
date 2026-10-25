@@ -508,7 +508,8 @@ await new Promise((r) => setTimeout(r, 5))
 //    只把「这轮不往 QQ 发」记下来，等这一轮结束再跳过发送。
 const r1 = await 闸.execute({ reply: false, reason: '在跟别人聊' })
 报('reply=false → 返回「这轮不接」', r1.ok === true && String(r1.说).includes('不接'), JSON.stringify(r1))
-报('不调 agent.cancel（避免 aborted + 重试风暴）', 取消.length === 前取消, '取消次数=' + 取消.length)
+await new Promise((r) => setTimeout(r, 20))
+报('「真停轮」关着（默认）→ 不 cancel（界面最干净）', 取消.length === 前取消, '取消次数=' + (取消.length - 前取消))
 发了.length = 0
 监听[0](会话, 助手消息(23, 1, [块('text', '这轮说了话但不该发出去')], false))
 监听[0](会话, 转完(23))
@@ -807,6 +808,31 @@ const 闸2 = 注册的工具.find((x) => x.name === 'qq_reply_gate')
 const 前取 = 取消.length
 const r2s = 闸2 ? await 闸2.execute({ reply: 'false', reason: '字符串形式' }) : { ok: false, 说: '没挂上' }
 报('reply 传字符串 "false" 也认（返回「不接」）', r2s.ok === true && String(r2s.说).includes('不接'), JSON.stringify(r2s))
+
+// ㊴ 「真停轮」打开 → 会真的 cancel（下一拍），关着 → 不 cancel
+// 先关一次门槛，让旧的卸下来（否则闸门挂着里还是旧对象，这次不会重新注册）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人', 门槛: false }],
+}, null, 2), 'utf8')
+await 轮询回调()
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 门槛真停轮: true, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人', 门槛: true }],
+}, null, 2), 'utf8')
+群消息段 = null
+群消息文本 = '真停轮测试（群）'
+群消息id = 9170
+群消息时间 = Math.floor(Date.now() / 1000) + 9500
+注册的工具.length = 0
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 60))
+const 闸3 = 注册的工具.find((x) => x.name === 'qq_reply_gate')
+const 前3 = 取消.length
+const r3x = 闸3 ? await 闸3.execute({ reply: false, reason: '真停轮' }) : { ok: false }
+await new Promise((r) => setTimeout(r, 30))
+报('「真停轮」开着 → 会调 agent.cancel（真的停掉这一轮）', 取消.length === 前3 + 1, '取消=' + (取消.length - 前3) + ' 工具=' + (闸3 ? '有' : '没挂上') + ' 返回=' + JSON.stringify(r3x))
+报('cancel 传 kind=user（跟用户按停止一样）', 取消.at(-1) && 取消.at(-1).kind === 'user', JSON.stringify(取消.at(-1)))
 
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
