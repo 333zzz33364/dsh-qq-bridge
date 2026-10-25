@@ -34,6 +34,9 @@ let 私聊消息时间 = 9999999999
 let 私聊消息id = 9000
 let 私聊消息段 = null          // 给「卡片 / 合并转发」用：设了就替掉默认的 text 段
 let 转发节点 = null            // get_forward_msg 假数据
+let 群消息文本 = '群里的话'
+let 群消息时间 = 9999999999
+let 群消息id = 9100
 globalThis.fetch = async (url, 选项) => {
   const 体 = JSON.parse((选项 && 选项.body) || '{}')
   const u = String(url)
@@ -46,6 +49,15 @@ globalThis.fetch = async (url, 选项) => {
         status: 'ok', retcode: 0,
         data: { messages: [{ user_id: 123, time: 私聊消息时间, message_id: 私聊消息id, message_type: 'private',
           message: 私聊消息段 || [{ type: 'text', data: { text: 私聊消息文本 } }] }] },
+      }),
+    }
+  }
+  if (u.includes('get_group_msg_history')) {
+    return {
+      json: async () => ({
+        status: 'ok', retcode: 0,
+        data: { messages: [{ user_id: 123, time: 群消息时间, message_id: 群消息id, message_type: 'group',
+          message: [{ type: 'text', data: { text: 群消息文本 } }] }] },
       }),
     }
   }
@@ -93,12 +105,13 @@ const 路由 = new Map()
 const 转进的 = []
 let 轮询回调 = null
 const 假agent = { followup: (m) => 转进的.push(m), session: { id: 'session-X' } }
+const 假群agent = { followup: (m) => 转进的.push(m), session: { id: 'session-G' } }
 const ctx = {
   on: (名字, cb) => { if (名字 === 'session/event') 监听.push(cb); return () => {} },
   effect: (fn) => { const 摘 = fn(); return () => { try { 摘 && 摘() } catch {} } },
   webServer: { register: (o) => 路由.set(o.path, o.handler) },
   logger: { info: () => {} },
-  agents: { get: (id) => (String(id) === 'session-X' ? 假agent : undefined) },
+  agents: { get: (id) => (String(id) === 'session-X' ? 假agent : (String(id) === 'session-G' ? 假群agent : undefined)) },
   sessions: { flush: async () => {} },
   interval: (fn) => { 轮询回调 = fn; return () => {} },
   get: () => undefined,
@@ -292,6 +305,51 @@ const 转发正文 = 转进的.length > 之前转2 ? String(转进的.at(-1).con
 报('转发正文有「共 N 条」', 转发正文.includes('合并转发的聊天记录') && 转发正文.includes('2'), 转发正文)
 报('转发正文带昵称和内容', 转发正文.includes('阿甲') && 转发正文.includes('你看这个') && 转发正文.includes('阿乙'), 转发正文)
 报('转发里的图记成 [图片]', 转发正文.includes('[图片]'), 转发正文)
+
+// ⑰ 私聊 / 群分两间屋：各进各的会话（2026-10-25）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: 'session-G',
+  私聊QQ: '123', 群号: '456', 转私聊: true, 转群: true, NapCat: 'http://127.0.0.1:3000',
+}, null, 2), 'utf8')
+私聊消息段 = null
+私聊消息文本 = '私聊这边一句话'
+私聊消息id = 9020
+私聊消息时间 = Math.floor(Date.now() / 1000) + 400
+群消息文本 = '群里一句话'
+群消息id = 9021
+群消息时间 = Math.floor(Date.now() / 1000) + 400
+const 之前两间 = 转进的.length
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 40))
+报('私聊和群各转一条进来', 转进的.length === 之前两间 + 2, '转进条数=' + 转进的.length)
+报('私聊那一条进的是私聊会话（source 带 qq + 正文对上）', JSON.stringify(转进的.at(-2)?.content?.[0]?.text || '').includes('私聊这边一句话'), JSON.stringify(转进的.at(-2)?.content?.[0]?.text))
+报('群那一条进的是群会话', JSON.stringify(转进的.at(-1)?.content?.[0]?.text || '').includes('群里一句话'), JSON.stringify(转进的.at(-1)?.content?.[0]?.text))
+
+// ⑱ 回话只回对应的那一边
+const 要问 = []
+globalThis.__记录 = 要问
+发了.length = 0
+监听[0](会话, 助手消息(20, 1, [块('text', '这句是私聊那间屋的')], false))
+监听[0](会话, 转完(20))
+await new Promise((r) => setTimeout(r, 30))
+报('私聊会话说完 → 只发私聊', 发了.length === 1 && 发了[0].url.endsWith('/send_private_msg'), 发了.map((x) => x.url).join(','))
+发了.length = 0
+监听[0](假群agent.session, 助手消息(21, 1, [块('text', '这句是群那间屋的')], false))
+监听[0](假群agent.session, 转完(21))
+await new Promise((r) => setTimeout(r, 30))
+报('群会话说完 → 只发群', 发了.length === 1 && 发了[0].url.endsWith('/send_group_msg'), 发了.map((x) => x.url).join(','))
+
+// ⑲ 两行选了同一间屋 → 照老行为两边都发，并在日志里说清
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: 'session-X',
+  私聊QQ: '123', 群号: '456', 转私聊: true, 转群: true, NapCat: 'http://127.0.0.1:3000',
+}, null, 2), 'utf8')
+发了.length = 0
+监听[0](会话, 助手消息(22, 1, [块('text', '同一间屋')], false))
+监听[0](会话, 转完(22))
+await new Promise((r) => setTimeout(r, 30))
+报('同一间屋 → 私聊和群各发一条（并且界面上会提示）', 发了.length === 2
+  && 发了.some((x) => x.url.endsWith('/send_private_msg')) && 发了.some((x) => x.url.endsWith('/send_group_msg')), 发了.map((x) => x.url).join(','))
 
 rmSync(家, { recursive: true, force: true })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
