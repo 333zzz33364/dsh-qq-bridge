@@ -616,6 +616,36 @@ await 轮询回调()
 await new Promise((r) => setTimeout(r, 40))
 报('把它点活之后：下一跳自己就转进去了（不丢）', 转进的.length === 之前死 + 1 && JSON.stringify(转进的.at(-1)?.content?.[0]?.text || '').includes('死着的时候说的话'), JSON.stringify(转进的.at(-1)?.content?.[0]?.text))
 
+// ㉚ 语音转写：语音条 → 交给外部命令 → 变成文字（插件自己不带模型）
+const 假ASR = join(家, '假asr.js')
+writeFileSync(假ASR, "process.stdout.write('这条语音说的是：晚上吃什么')" + String.fromCharCode(10), 'utf8')
+const 坏ASR = join(家, '坏asr.js')
+writeFileSync(坏ASR, "process.stderr.write('模型没装'); process.exit(1)" + String.fromCharCode(10), 'utf8')
+const 语音段 = (f) => [
+  { type: 'text', data: { text: '发你条语音' } },
+  { type: 'record', data: { file: f } },
+]
+const 跑一遍 = async (配置补, id, 段) => {
+  writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+    总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+    绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' }],
+    ...配置补,
+  }, null, 2), 'utf8')
+  私聊消息段 = 段
+  私聊消息id = id
+  私聊消息时间 = Math.floor(Date.now() / 1000) + 4000 + (id % 100)
+  const 前 = 转进的.length
+  await 轮询回调()
+  await new Promise((r) => setTimeout(r, 300))
+  return 转进的.length > 前 ? String(转进的.at(-1).content[0].text) : ''
+}
+const 转写开 = await 跑一遍({ 语音转写: true, 转写命令: 'node "' + 假ASR + '" "{file}"', 转写超时秒: 20 }, 9100, 语音段('C:/x/voice.silk'))
+报('语音转写开着 → 语音条变成文字', 转写开.includes('（语音）') && 转写开.includes('晚上吃什么'), 转写开)
+const 转写关 = await 跑一遍({ 语音转写: false, 转写命令: 'node "' + 假ASR + '" "{file}"' }, 9101, 语音段('C:/x/voice2.silk'))
+报('语音转写关着 → 还是 [语音]', 转写关.includes('[语音]') && !转写关.includes('晚上吃什么'), 转写关)
+const 转写坏 = await 跑一遍({ 语音转写: true, 转写命令: 'node "' + 坏ASR + '" "{file}"', 转写超时秒: 20 }, 9102, 语音段('C:/x/voice3.silk'))
+报('命令失败 → 明说转写失败（不吞掉整条消息）', 转写坏.includes('转写失败') && 转写坏.includes('发你条语音'), 转写坏)
+
 rmSync(家, { recursive: true, force: true })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
