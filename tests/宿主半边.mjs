@@ -684,6 +684,32 @@ await 轮询回调()
 await new Promise((r) => setTimeout(r, 60))
 报('超过补投窗口的旧消息：不再补投（不会一打开就冒一条旧回复）', 转进的.length === 之前旧, '转进=' + 转进的.length)
 
+// ㉝ 重启不重投：水位落盘 + 没记录过的聊天从「此刻」开始
+const 状态文件 = join(家, 'qq-bridge-state.json')
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 补投窗口分: 60, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' }],
+}, null, 2), 'utf8')
+私聊消息段 = null
+私聊消息文本 = '刚发的一条'
+私聊消息id = 9120
+私聊消息时间 = Math.floor(Date.now() / 1000) + 5000
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 40))
+let 水位 = null
+try { 水位 = JSON.parse(readFileSync(状态文件, 'utf8')) } catch (e) {}
+报('水位和已转 id 会落盘（重启后不用从零开始）', Boolean(水位 && 水位.上次 && 水位.上次['私聊:123'] === 私聊消息时间 && Array.isArray(水位.已转) && 水位.已转.includes(9120)), JSON.stringify(水位 && 水位.上次))
+
+// 没记录过的聊天：历史消息不该被当成新的补投
+writeFileSync(状态文件, JSON.stringify({ 上次: {}, 已转: [] }, null, 2), 'utf8')
+私聊消息文本 = '五分钟前的旧消息'
+私聊消息id = 9121
+私聊消息时间 = Math.floor(Date.now() / 1000) - 5 * 60
+const 之前补 = 转进的.length
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 40))
+报('没水位记录的聊天：历史消息不补投（从此刻开始算）', 转进的.length === 之前补, '转进=' + 转进的.length)
+
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
