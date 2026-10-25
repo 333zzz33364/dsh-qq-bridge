@@ -717,6 +717,21 @@ const asr2 = 存储[0]
 报('/asr-status 带下载进度字段（没在下载时是 null）', asr2 && asr2.下载 === null, JSON.stringify(asr2 && asr2.下载))
 报('/asr-status 带「模型就绪 / 模型目录」', asr2 && typeof asr2.模型就绪 === 'boolean' && String(asr2.模型目录 || '').includes('models'), JSON.stringify({ 就绪: asr2 && asr2.模型就绪, 目: asr2 && asr2.模型目录 }))
 
+// ㉟ 开了「只发 [QQ] 块」时，转进去的消息里要点明这个约定（不然它压根不会写块）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 只发标记内: true, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' }],
+}, null, 2), 'utf8')
+私聊消息段 = null
+私聊消息文本 = '这条消息要提醒它写块'
+私聊消息id = 9130
+私聊消息时间 = Math.floor(Date.now() / 1000) + 6000
+const 之前块 = 转进的.length
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 40))
+const 带块提示 = 转进的.length > 之前块 ? String(转进的.at(-1).content[0].text) : ''
+报('「只发 [QQ] 块」开着 → 转进去的消息里会说明这个约定', 带块提示.includes('[QQ]') && 带块提示.includes('块外'), 带块提示.slice(-90))
+
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
