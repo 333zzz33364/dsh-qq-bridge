@@ -504,10 +504,16 @@ writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
 }, null, 2), 'utf8')
 const 前取消 = 取消.length
 await new Promise((r) => setTimeout(r, 5))
-// ② 正常判定：reply=false → 取消这一轮
+// ② 正常判定：reply=false → **不调 cancel**（免得 UI 冒出 tool call aborted + 重试），
+//    只把「这轮不往 QQ 发」记下来，等这一轮结束再跳过发送。
 const r1 = await 闸.execute({ reply: false, reason: '在跟别人聊' })
-报('reply=false → 调了 agent.cancel（停掉这一轮）', 取消.length === 前取消 + 1, JSON.stringify(r1))
-报('取消理由标成 user（跟用户自己点停一样）', 取消.at(-1) && 取消.at(-1).kind === 'user', JSON.stringify(取消.at(-1)))
+报('reply=false → 返回「这轮不接」', r1.ok === true && String(r1.说).includes('不接'), JSON.stringify(r1))
+报('不调 agent.cancel（避免 aborted + 重试风暴）', 取消.length === 前取消, '取消次数=' + 取消.length)
+发了.length = 0
+监听[0](会话, 助手消息(23, 1, [块('text', '这轮说了话但不该发出去')], false))
+监听[0](会话, 转完(23))
+await new Promise((r) => setTimeout(r, 40))
+报('判定不接之后那一轮：一个字都不发到 QQ', 发了.length === 0, '发了=' + 发了.length)
 // ③ 再调一次（不在 QQ 唤醒窗口内）→ 拒绝
 const r2 = await 闸.execute({ reply: false })
 报('不是 QQ 叫醒的那一轮 → 门槛不生效（拒绝）', r2.ok === false, JSON.stringify(r2))
@@ -800,7 +806,7 @@ await new Promise((r) => setTimeout(r, 60))
 const 闸2 = 注册的工具.find((x) => x.name === 'qq_reply_gate')
 const 前取 = 取消.length
 const r2s = 闸2 ? await 闸2.execute({ reply: 'false', reason: '字符串形式' }) : { ok: false, 说: '没挂上' }
-报('reply 传字符串 "false" 也能停掉这一轮', 取消.length === 前取 + 1, JSON.stringify(r2s))
+报('reply 传字符串 "false" 也认（返回「不接」）', r2s.ok === true && String(r2s.说).includes('不接'), JSON.stringify(r2s))
 
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
