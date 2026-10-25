@@ -7,7 +7,7 @@
 //   5) /state 路由能回出配置和 NapCat 探活结果
 // 跑法： node tests/宿主半边.mjs
 
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -352,17 +352,20 @@ await new Promise((r) => setTimeout(r, 30))
 await new Promise((r) => setTimeout(r, 30))
 报('群会话说完 → 只发群', 发了.length === 1 && 发了[0].url.endsWith('/send_group_msg'), 发了.map((x) => x.url).join(','))
 
-// ⑲ 两行选了同一间屋 → 照老行为两边都发，并在日志里说清
+// ⑲ 同一间会话绑两条 → 只保留第一条（防止两个聊天挤进一间屋、回话时串）
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
-  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: 'session-X',
-  私聊QQ: '123', 群号: '456', 转私聊: true, 转群: true, NapCat: 'http://127.0.0.1:3000',
+  总开关: true, 试运行: false,
+  绑定: [
+    { 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' },
+    { 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人' },
+  ],
+  NapCat: 'http://127.0.0.1:3000',
 }, null, 2), 'utf8')
 发了.length = 0
 监听[0](会话, 助手消息(22, 1, [块('text', '同一间屋')], false))
 监听[0](会话, 转完(22))
 await new Promise((r) => setTimeout(r, 30))
-报('同一间屋 → 私聊和群各发一条（并且界面上会提示）', 发了.length === 2
-  && 发了.some((x) => x.url.endsWith('/send_private_msg')) && 发了.some((x) => x.url.endsWith('/send_group_msg')), 发了.map((x) => x.url).join(','))
+报('同一间会话绑两条 → 只留第一条（不发第二条的群）', 发了.length === 1 && 发了[0].url.endsWith('/send_private_msg'), 发了.map((x) => x.url).join(','))
 
 // ⑳ 称呼分两套：私聊用「私聊称呼」，群里用「群称呼」（群里不止一个人）
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
@@ -470,8 +473,9 @@ await new Promise((r) => setTimeout(r, 40))
 
 // ㉖ 回复门槛：挂工具 / 只在被 QQ 叫醒时能关闸 / 关掉就卸下来
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
-  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: '', 私聊QQ: '123', 群号: '',
-  转私聊: true, 转群: false, 回复门槛: true, NapCat: 'http://127.0.0.1:3000',
+  总开关: true, 试运行: false, 回复门槛: true,
+  绑定: [{ 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人', 门槛: true }],
+  NapCat: 'http://127.0.0.1:3000',
 }, null, 2), 'utf8')
 私聊消息段 = null
 私聊消息文本 = '群里有人说：今天好热'
@@ -507,6 +511,48 @@ await new Promise((r) => setTimeout(r, 40))
 报('门槛关掉 → 工具被卸下', 闸.__卸了 === true, String(闸.__卸了))
 const r3 = await 闸.execute({ reply: false })
 报('门槛关着时调用 → 明确说"没开"', r3.ok === false && String(r3.说).includes('没开'), JSON.stringify(r3))
+
+// ㉗ 0.6.0：老配置自动变成「绑定」两行；多群各回各的；私聊不挂门槛
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: 'session-G',
+  私聊QQ: '123', 群号: '456', 转私聊: true, 转群: true, NapCat: 'http://127.0.0.1:3000',
+}, null, 2), 'utf8')
+const 迁 = await (async () => {
+  存储.length = 0
+  await 路由.get('/dsh-qq-bridge/save')([JSON.stringify(JSON.parse(readFileSync(join(家, 'qq-bridge-config.json'), 'utf8')))], fakeRes)
+  return 存储[0]
+})()
+报('老配置（私聊会话+群会话）→ 自动变成两条绑定', 迁 && 迁.配置 && Array.isArray(迁.配置.绑定) && 迁.配置.绑定.length === 2, JSON.stringify((迁 && 迁.配置 && 迁.配置.绑定 || []).map((x) => x.类型 + ':' + x.号码)))
+报('第一条是私聊、称呼沿用', 迁.配置.绑定[0].类型 === '私聊' && 迁.配置.绑定[0].号码 === '123')
+报('第二条是群、称呼是「群里的人」', 迁.配置.绑定[1].类型 === '群' && 迁.配置.绑定[1].号码 === '456')
+
+// 两个群 → 两间会话：各回各的群
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 转私聊: true, 转群: true, NapCat: 'http://127.0.0.1:3000',
+  绑定: [
+    { 类型: '群', 号码: '111', 会话: 'session-X', 称呼: '一号群的大家' },
+    { 类型: '群', 号码: '222', 会话: 'session-G', 称呼: '二号群的大家' },
+  ],
+}, null, 2), 'utf8')
+发了.length = 0
+监听[0](会话, 助手消息(30, 1, [块('text', '一号群这边')], false))
+监听[0](会话, 转完(30))
+监听[0](假群agent.session, 助手消息(31, 1, [块('text', '二号群这边')], false))
+监听[0](假群agent.session, 转完(31))
+await new Promise((r) => setTimeout(r, 40))
+报('两个群各发到自己的群号（不串）', 发了.length === 2
+  && 发了.some((x) => String(x.体.group_id) === '111') && 发了.some((x) => String(x.体.group_id) === '222'),
+  JSON.stringify(发了.map((x) => [x.url.slice(-16), x.体.group_id])))
+
+// 只有私聊绑定 + 门槛开着 → 私聊不挂工具
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 回复门槛: true, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明', 门槛: true }],
+}, null, 2), 'utf8')
+注册的工具.length = 0
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 40))
+报('私聊不挂回复门槛（主人私聊就是在跟它说话）', !注册的工具.some((x) => x.name === 'qq_reply_gate'), 注册的工具.map((x) => x.name).join(','))
 
 rmSync(家, { recursive: true, force: true })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
