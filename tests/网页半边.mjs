@@ -10,7 +10,7 @@ globalThis.fetch = async (url) => {
     json: async () => ({
       ok: true, 版本: '0.1.0',
       配置: {
-    总开关: false, 试运行: true, 回复门槛: false, NapCat: 'http://127.0.0.1:3000', 令牌: '',
+    总开关: false, 试运行: true, NapCat: 'http://127.0.0.1:3000', 令牌: '',
     绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' }],
     收图: true, 发图: true, 收图最多: 4, 图上限MB: 5, 图片根目录: '',
   },

@@ -489,10 +489,10 @@ await 轮询回调()          // 心跳：挂工具 + 拉消息
 await new Promise((r) => setTimeout(r, 40))
 报('门槛开着 → 给绑了 QQ 的会话挂上 qq_reply_gate', 注册的工具.some((x) => x.name === 'qq_reply_gate'), 注册的工具.map((x) => x.name).join(','))
 const 闸 = 注册的工具.find((x) => x.name === 'qq_reply_gate')
-// ① 还没被 QQ 叫醒过（上面刚被叫醒过一轮，所以先换一间屋测）
+// ① 配置保持「群 + 门槛开」不变（0.8.2 起没有总开关了，只看这一行）
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
-  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: '', 私聊QQ: '123', 群号: '',
-  转私聊: true, 转群: false, 回复门槛: true, NapCat: 'http://127.0.0.1:3000',
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人', 门槛: true }],
 }, null, 2), 'utf8')
 const 前取消 = 取消.length
 await new Promise((r) => setTimeout(r, 5))
@@ -503,16 +503,16 @@ const r1 = await 闸.execute({ reply: false, reason: '在跟别人聊' })
 // ③ 再调一次（不在 QQ 唤醒窗口内）→ 拒绝
 const r2 = await 闸.execute({ reply: false })
 报('不是 QQ 叫醒的那一轮 → 门槛不生效（拒绝）', r2.ok === false, JSON.stringify(r2))
-// ④ 关掉开关 → 下一跳卸下来
+// ④ 把那一行的门槛取消 → 下一跳卸下来
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
-  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: '', 私聊QQ: '123', 群号: '',
-  转私聊: true, 转群: false, 回复门槛: false, NapCat: 'http://127.0.0.1:3000',
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人', 门槛: false }],
 }, null, 2), 'utf8')
 await 轮询回调()
 await new Promise((r) => setTimeout(r, 40))
 报('门槛关掉 → 工具被卸下', 闸.__卸了 === true, String(闸.__卸了))
 const r3 = await 闸.execute({ reply: false })
-报('门槛关着时调用 → 明确说"没开"', r3.ok === false && String(r3.说).includes('没开'), JSON.stringify(r3))
+报('门槛关着时调用 → 明确说「这个聊天没开门槛」', r3.ok === false && String(r3.说).includes('没开门槛'), JSON.stringify(r3))
 
 // ㉗ 0.6.0：老配置自动变成「绑定」两行；多群各回各的；私聊不挂门槛
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
