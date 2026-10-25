@@ -31,12 +31,12 @@ const 报 = (标签, 过, 详情) => { if (!过) 挂了++; console.log(`${过 ? 
 const 发了 = []
 const 请求头们 = []
 let 私聊消息文本 = '宝宝'
-let 私聊消息时间 = 9999999999
+let 私聊消息时间 = 1700000000
 let 私聊消息id = 9000
 let 私聊消息段 = null          // 给「卡片 / 合并转发」用：设了就替掉默认的 text 段
 let 转发节点 = null            // get_forward_msg 假数据
 let 群消息文本 = '群里的话'
-let 群消息时间 = 9999999999
+let 群消息时间 = 1700000000
 let 群消息id = 9100
 let 群消息段 = null          // 给群消息用（跟私聊那个一样）
 let 内层节点 = null           // 「转发里套转发」用的内层节点
@@ -140,7 +140,7 @@ const ctx = {
   get: () => undefined,
 }
 
-模.apply(ctx)
+const 桥 = 模.apply(ctx)
 报('session/event 监听挂上了', 监听.length >= 1)
 
 const 会话 = { id: 'session-X' }
@@ -483,14 +483,17 @@ await new Promise((r) => setTimeout(r, 40))
 
 // ㉖ 回复门槛：挂工具 / 只在被 QQ 叫醒时能关闸 / 关掉就卸下来
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
-  总开关: true, 试运行: false, 回复门槛: true,
+  总开关: true, 试运行: false, 回复门槛: true, 群里听所有人: true,
   绑定: [{ 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人', 门槛: true }],
   NapCat: 'http://127.0.0.1:3000',
 }, null, 2), 'utf8')
-私聊消息段 = null
-私聊消息文本 = '群里有人说：今天好热'
-私聊消息id = 9070
-私聊消息时间 = Math.floor(Date.now() / 1000) + 1000
+// ⭐ 0.9.9：门槛现在会看「这轮是群还是私聊」，所以这里要喂一条**群里的**新消息
+群消息段 = null
+群消息文本 = '群里有人说：今天好热'
+群消息id = 9070
+群消息时间 = Math.floor(Date.now() / 1000) + 1000
+私聊消息id = 8990            // 让私聊那条变「旧的」，别把群唤醒覆盖成私聊
+私聊消息时间 = 1
 注册的工具.length = 0
 取消.length = 0
 await 轮询回调()          // 心跳：挂工具 + 拉消息
@@ -499,7 +502,7 @@ await new Promise((r) => setTimeout(r, 40))
 const 闸 = 注册的工具.find((x) => x.name === 'qq_reply_gate')
 // ① 配置保持「群 + 门槛开」不变（0.8.2 起没有总开关了，只看这一行）
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
-  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000', 群里听所有人: true,
   绑定: [{ 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人', 门槛: true }],
 }, null, 2), 'utf8')
 const 前取消 = 取消.length
@@ -517,17 +520,19 @@ await new Promise((r) => setTimeout(r, 40))
 报('判定不接之后那一轮：一个字都不发到 QQ', 发了.length === 0, '发了=' + 发了.length)
 // ③ 再调一次（不在 QQ 唤醒窗口内）→ 拒绝
 const r2 = await 闸.execute({ reply: false })
-报('不是 QQ 叫醒的那一轮 → 门槛不生效（拒绝）', r2.ok === false, JSON.stringify(r2))
+报('不是 QQ 叫醒的那一轮 → 门槛放行（不让它瞎判）',
+  r2.ok === true && String(r2.说).includes('不是 QQ 消息叫起来'), JSON.stringify(r2))
 // ④ 把那一行的门槛取消 → 下一跳卸下来
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
-  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000', 群里听所有人: true,
   绑定: [{ 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人', 门槛: false }],
 }, null, 2), 'utf8')
 await 轮询回调()
 await new Promise((r) => setTimeout(r, 40))
 报('门槛关掉 → 工具被卸下', 闸.__卸了 === true, String(闸.__卸了))
 const r3 = await 闸.execute({ reply: false })
-报('门槛关着时调用 → 明确说「这个聊天没开门槛」', r3.ok === false && String(r3.说).includes('没开门槛'), JSON.stringify(r3))
+报('门槛关着时调用 → 放行并说清「门槛只对群有效」',
+  r3.ok === true && String(r3.说).includes('没开门槛'), JSON.stringify(r3))
 
 // ㉗ 0.6.0：老配置自动变成「绑定」两行；多群各回各的；私聊不挂门槛
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
@@ -771,13 +776,13 @@ writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
 }, null, 2), 'utf8')
 // 先关一次门槛让旧的卸下来，再打开 → 保证这次会真的重新注册（否则注册表里还是旧对象）
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
-  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000', 群里听所有人: true,
   绑定: [{ 类型: '群', 号码: '456', 会话: 'session-G', 称呼: '群里的人', 门槛: false }],
 }, null, 2), 'utf8')
 await 轮询回调()
 注册的工具.length = 0
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
-  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000', 群里听所有人: true,
   绑定: [{ 类型: '群', 号码: '456', 会话: 'session-G', 称呼: '群里的人', 门槛: true }],
 }, null, 2), 'utf8')
 群消息段 = [{ type: 'text', data: { text: '群里测试测试' } }]
@@ -807,14 +812,14 @@ const 工具 = 注册的工具.find((x) => x.name === 'qq_reply_gate')
 
 // ㊳ 门槛的 reply 用字符串 "false" 也要认（模型常这么传）
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
-  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000', 群里听所有人: true,
   绑定: [{ 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人', 门槛: true }],
 }, null, 2), 'utf8')
 注册的工具.length = 0
-私聊消息段 = null
-私聊消息文本 = '字符串 false 的测试'
-私聊消息id = 9160
-私聊消息时间 = Math.floor(Date.now() / 1000) + 9000
+群消息段 = null
+群消息文本 = '字符串 false 的测试'
+群消息id = 9160
+群消息时间 = Math.floor(Date.now() / 1000) + 9000
 await 轮询回调()
 await new Promise((r) => setTimeout(r, 60))
 const 闸2 = 注册的工具.find((x) => x.name === 'qq_reply_gate')
@@ -825,12 +830,12 @@ const r2s = 闸2 ? await 闸2.execute({ reply: 'false', reason: '字符串形式
 // ㊴ 「真停轮」打开 → 会真的 cancel（下一拍），关着 → 不 cancel
 // 先关一次门槛，让旧的卸下来（否则闸门挂着里还是旧对象，这次不会重新注册）
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
-  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000', 群里听所有人: true,
   绑定: [{ 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人', 门槛: false }],
 }, null, 2), 'utf8')
 await 轮询回调()
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
-  总开关: true, 试运行: false, 门槛真停轮: true, NapCat: 'http://127.0.0.1:3000',
+  总开关: true, 试运行: false, 门槛真停轮: true, NapCat: 'http://127.0.0.1:3000', 群里听所有人: true,
   绑定: [{ 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人', 门槛: true }],
 }, null, 2), 'utf8')
 群消息段 = null
@@ -897,6 +902,38 @@ await 路由.get('/dsh-qq-bridge/test-send')([JSON.stringify({})], 空绑回)
 报('没绑定时明说「还没绑定任何聊天」',
   !!(空绑回.体 && 空绑回.体.ok === false && String(空绑回.体.说).includes('还没绑定任何聊天')), JSON.stringify(空绑回.体))
 报('没绑定时一条都不发', 发了.length === 0, String(发了.length))
+
+// ㊶ 0.9.9（她 20:36 说的「群里 @ 它不理人」）
+//   ① 点名识别只用纯函数测，不依赖轮询时序
+报('@ 了我 → 算点名', 模.识别点名([{ type: 'at', data: { qq: '10001' } }], '10001', new Set()) === true)
+报('@ 了别人 → 不算点名', 模.识别点名([{ type: 'at', data: { qq: '20002' } }], '10001', new Set()) === false)
+报('@ 全体 → 不算点名', 模.识别点名([{ type: 'at', data: { qq: 'all' } }], '10001', new Set()) === false)
+报('引用我发过的消息 → 算点名', 模.识别点名([{ type: 'reply', data: { id: '777' } }], '10001', new Set(['777'])) === true)
+报('引用别人的消息 → 不算点名', 模.识别点名([{ type: 'reply', data: { id: '888' } }], '10001', new Set(['777'])) === false)
+报('普通文字 → 不算点名', 模.识别点名([{ type: 'text', data: { text: '大肥鱼在吗' } }], '10001', new Set()) === false)
+
+//   ② 门槛：点名 / 私聊 一律放行（不让模型犹豫着判 false 把整轮停掉）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '群', 号码: '456', 会话: 'session-X', 称呼: '群里的人', 门槛: true }],
+}, null, 2), 'utf8')
+注册的工具.length = 0
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 80))
+const 闸6 = 注册的工具.find((x) => x.name === 'qq_reply_gate') || 闸3 || 闸2
+报('门槛工具还挂着（后面两项要用）', Boolean(闸6), 注册的工具.map((x) => x.name).join(','))
+
+桥.测试.记唤醒('session-X', '群', true)
+const r6 = await 闸6.execute({ reply: false, reason: '它犹豫了' })
+报('点了名的这一轮 → 门槛直接放行（不会被判成不接）', r6.ok === true && String(r6.说).includes('点了你的名'), JSON.stringify(r6))
+
+桥.测试.记唤醒('session-X', '私聊', false)
+const r7 = await 闸6.execute({ reply: false })
+报('私聊那一轮调门槛 → 一律放行（私聊没有门槛开关）', r7.ok === true && String(r7.说).includes('私聊'), JSON.stringify(r7))
+
+桥.测试.记唤醒('session-X', '群', false)
+const r8 = await 闸6.execute({ reply: false, reason: '在跟别人聊' })
+报('群里没点名 + 判不接 → 还是照常判（没被短路掉）', r8.ok === true && String(r8.说).includes('不接'), JSON.stringify(r8))
 
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
