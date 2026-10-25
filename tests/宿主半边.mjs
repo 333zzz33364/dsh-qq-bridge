@@ -554,6 +554,47 @@ await 轮询回调()
 await new Promise((r) => setTimeout(r, 40))
 报('私聊不挂回复门槛（主人私聊就是在跟它说话）', !注册的工具.some((x) => x.name === 'qq_reply_gate'), 注册的工具.map((x) => x.name).join(','))
 
+// ㉘ 0.7.0 出站两闸：[QQ] 块 / 只回 QQ 唤醒
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 只发标记内: true, 只回QQ唤醒: false, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' }],
+}, null, 2), 'utf8')
+发了.length = 0
+监听[0](会话, 助手消息(40, 1, [块('text', '这块不要发' + String.fromCharCode(10) + '[QQ]发这句就够了[/QQ]' + String.fromCharCode(10) + '这块也不要')], false))
+监听[0](会话, 转完(40))
+await new Promise((r) => setTimeout(r, 30))
+报('「只发标记内」开着：只发 [QQ] 块里那句', 发了.length === 1 && JSON.stringify(发了[0].体.message[0].data.text) === JSON.stringify('发这句就够了'), JSON.stringify(发了.map((x) => x.体.message && x.体.message[0] && x.体.message[0].data && x.体.message[0].data.text)))
+发了.length = 0
+监听[0](会话, 助手消息(41, 1, [块('text', '这轮没写块')], false))
+监听[0](会话, 转完(41))
+await new Promise((r) => setTimeout(r, 30))
+报('「只发标记内」开着：没写块 → 一句都不发', 发了.length === 0, String(发了.length))
+
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 只发标记内: false, 只回QQ唤醒: true, NapCat: 'http://127.0.0.1:3000',
+  绑定: [
+    { 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' },
+    { 类型: '群', 号码: '456', 会话: 'session-G', 称呼: '群里的人' },
+  ],
+}, null, 2), 'utf8')
+发了.length = 0
+// 用「从没被 QQ 叫醒过」的那间（session-G）来验：不是 QQ 唤醒 → 不推
+监听[0](假群agent.session, 助手消息(42, 1, [块('text', '我在 DSH 里自己聊的')], false))
+监听[0](假群agent.session, 转完(42))
+await new Promise((r) => setTimeout(r, 30))
+报('「只回 QQ 唤醒」开着：不是 QQ 叫的 → 不推手机', 发了.length === 0, String(发了.length))
+私聊消息段 = null
+私聊消息文本 = 'QQ 里问一句'
+私聊消息id = 9080
+私聊消息时间 = Math.floor(Date.now() / 1000) + 2000
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 40))
+发了.length = 0
+监听[0](会话, 助手消息(43, 1, [块('text', 'QQ 里回你一句')], false))
+监听[0](会话, 转完(43))
+await new Promise((r) => setTimeout(r, 30))
+报('「只回 QQ 唤醒」开着：QQ 叫醒的那一轮 → 正常回', 发了.length === 1, String(发了.length))
+
 rmSync(家, { recursive: true, force: true })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
