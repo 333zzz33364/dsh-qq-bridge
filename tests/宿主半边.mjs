@@ -859,6 +859,32 @@ writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
 await new Promise((r) => setTimeout(r, 120))
 报('「长回复拆段」开着 → 按空行拆成 3 条', 发了.length === 3, '发了 ' + 发了.length + ' 条')
 
+// ㉛ 0.9.7 用户反馈：设置页「试一句」老是说「这间会话没绑任何 QQ 聊天」
+//   —— 手动测试没有会话可反查，以前直接判定没绑定，于是永远发不出去。
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000', 私聊QQ: '', 群号: '',
+  绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' }],
+}, null, 2), 'utf8')
+发了.length = 0
+const 试发回 = { 体: null, end(串) { this.体 = JSON.parse(串) } }
+await 路由.get('/dsh-qq-bridge/test-send')([JSON.stringify({})], 试发回)
+报('「试一句」按绑定发得出去（不再说没绑）',
+  发了.length === 1 && 发了[0].url.endsWith('/send_private_msg') && Number(发了[0].体.user_id) === 123,
+  '发了 ' + 发了.length + ' 条 :: ' + JSON.stringify(发了.map((x) => x.体.user_id)))
+报('「试一句」回话里说清发给了谁',
+  !!(试发回.体 && 试发回.体.ok && String(试发回.体.说).includes('123')), JSON.stringify(试发回.体))
+
+// 没绑定时要说人话（别再报「会话没绑」这种让人以为是 bug 的句子）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000', 绑定: [],
+}, null, 2), 'utf8')
+发了.length = 0
+const 空绑回 = { 体: null, end(串) { this.体 = JSON.parse(串) } }
+await 路由.get('/dsh-qq-bridge/test-send')([JSON.stringify({})], 空绑回)
+报('没绑定时明说「还没绑定任何聊天」',
+  !!(空绑回.体 && 空绑回.体.ok === false && String(空绑回.体.说).includes('还没绑定任何聊天')), JSON.stringify(空绑回.体))
+报('没绑定时一条都不发', 发了.length === 0, String(发了.length))
+
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
