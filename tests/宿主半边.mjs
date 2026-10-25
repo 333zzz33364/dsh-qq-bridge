@@ -65,6 +65,9 @@ globalThis.fetch = async (url, 选项) => {
       }),
     }
   }
+  if (u.includes('multimedia.nt.qq.com.cn')) {
+    return { ok: true, arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer }
+  }
   if (u.includes('get_forward_msg')) {
     const 是谁 = JSON.stringify(体)
     const 内层 = 是谁.includes('fw-inner')
@@ -639,12 +642,21 @@ const 跑一遍 = async (配置补, id, 段) => {
   await new Promise((r) => setTimeout(r, 300))
   return 转进的.length > 前 ? String(转进的.at(-1).content[0].text) : ''
 }
-const 转写开 = await 跑一遍({ 语音转写: true, 转写命令: 'node "' + 假ASR + '" "{file}"', 转写超时秒: 20 }, 9100, 语音段('C:/x/voice.silk'))
+const 真音频 = join(家, 'voice.silk')
+writeFileSync(真音频, Buffer.from([1, 2, 3]))
+const 转写开 = await 跑一遍({ 语音转写: true, 转写命令: 'node "' + 假ASR + '" "{file}"', 转写超时秒: 20 }, 9100, 语音段(真音频))
 报('语音转写开着 → 语音条变成文字', 转写开.includes('（语音）') && 转写开.includes('晚上吃什么'), 转写开)
-const 转写关 = await 跑一遍({ 语音转写: false, 转写命令: 'node "' + 假ASR + '" "{file}"' }, 9101, 语音段('C:/x/voice2.silk'))
+const 转写关 = await 跑一遍({ 语音转写: false, 转写命令: 'node "' + 假ASR + '" "{file}"' }, 9101, 语音段(真音频))
 报('语音转写关着 → 还是 [语音]', 转写关.includes('[语音]') && !转写关.includes('晚上吃什么'), 转写关)
-const 转写坏 = await 跑一遍({ 语音转写: true, 转写命令: 'node "' + 坏ASR + '" "{file}"', 转写超时秒: 20 }, 9102, 语音段('C:/x/voice3.silk'))
+const 转写坏 = await 跑一遍({ 语音转写: true, 转写命令: 'node "' + 坏ASR + '" "{file}"', 转写超时秒: 20 }, 9102, 语音段(真音频))
 报('命令失败 → 明说转写失败（不吞掉整条消息）', 转写坏.includes('转写失败') && 转写坏.includes('发你条语音'), 转写坏)
+// ⭐ 她实测报的那条：QQ 给的 file 是 https://multimedia.nt.qq.com.cn/download?appid=…
+const 转写链 = await 跑一遍({ 语音转写: true, 转写命令: 'node "' + 假ASR + '" "{file}"', 转写超时秒: 20 }, 9103,
+  语音段('https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=abc&spec=0'))
+报('语音的 file 是网络地址时 → 先下载到本地再转写（她实测报的那个）', 转写链.includes('（语音）') && 转写链.includes('晚上吃什么'), 转写链)
+const 音频目录 = join(家, 'audio')
+const 落下的 = (() => { try { return readFileSync(join(音频目录, 'qq-voice-9103.amr')).length } catch (e) { return -1 } })()
+报('下下来的音频确实落在 qq-bridge/audio 里', 落下的 === 4, String(落下的))
 
 // ㉛ 语音依赖：状态接口（没装好时是「未就绪」）+ 一键装立刻返回不挂住请求
 存储.length = 0
