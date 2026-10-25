@@ -710,6 +710,13 @@ await 轮询回调()
 await new Promise((r) => setTimeout(r, 40))
 报('没水位记录的聊天：历史消息不补投（从此刻开始算）', 转进的.length === 之前补, '转进=' + 转进的.length)
 
+// ㉞ 下载进度：状态接口里要能拿到「已下 / 总 / 百分比 / 速度」
+存储.length = 0
+await 路由.get('/dsh-qq-bridge/asr-status')([], fakeRes)
+const asr2 = 存储[0]
+报('/asr-status 带下载进度字段（没在下载时是 null）', asr2 && asr2.下载 === null, JSON.stringify(asr2 && asr2.下载))
+报('/asr-status 带「模型就绪 / 模型目录」', asr2 && typeof asr2.模型就绪 === 'boolean' && String(asr2.模型目录 || '').includes('models'), JSON.stringify({ 就绪: asr2 && asr2.模型就绪, 目: asr2 && asr2.模型目录 }))
+
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
