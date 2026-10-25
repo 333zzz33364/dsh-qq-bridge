@@ -77,6 +77,7 @@ globalThis.fetch = async (url, 选项) => {
   return { json: async () => ({ status: 'ok', retcode: 0, data: { message_id: 1 } }) }
 }
 
+process.env.QQ_BRIDGE_探活超时 = '300'   // 让「NapCat 不回应」那条测试 0.3 秒就有结果
 const 模 = await import(new URL('../lib/host.js', import.meta.url).href + '?v=' + Date.now())
 
 // ---------- 纯函数 ----------
@@ -934,6 +935,32 @@ const r7 = await 闸6.execute({ reply: false })
 桥.测试.记唤醒('session-X', '群', false)
 const r8 = await 闸6.execute({ reply: false, reason: '在跟别人聊' })
 报('群里没点名 + 判不接 → 还是照常判（没被短路掉）', r8.ok === true && String(r8.说).includes('不接'), JSON.stringify(r8))
+
+// ㊷ 0.9.10：NapCat 不回应时，设置页也不能永远「读取中…」
+//   做法：探活带超时（测试里压到 300ms）+ /state 兜底返回版本/配置/日志
+{
+  const 原fetch = globalThis.fetch
+  globalThis.fetch = (url, 选项) => {
+    if (String(url).includes('get_login_info')) {
+      // 这个假 fetch 认 abort（真 fetch 也认）：不认的话超时根本发不出去
+      return new Promise((_, 拒) => {
+        const 信 = 选项 && 选项.signal
+        if (信) 信.addEventListener('abort', () => 拒(new Error('aborted')))
+      })
+    }
+    return 原fetch(url, 选项)
+  }
+  const 起 = Date.now()
+  const 桶 = {}
+  const res = { setHeader() {}, end(串) { 桶.体 = JSON.parse(串) } }
+  await 路由.get('/dsh-qq-bridge/state')([], res)
+  const 用时 = Date.now() - 起
+  globalThis.fetch = 原fetch
+  报('NapCat 不回应时 /state 也会回来（不等死）', Boolean(桶.体 && 桶.体.ok === true), JSON.stringify(桶.体).slice(0, 120))
+  报('超时生效（0.3 秒超时 → 1 秒内回来）', 用时 < 1500, 用时 + 'ms')
+  报('兜底里仍然有版本和配置', Boolean(桶.体 && 桶.体.版本 && 桶.体.配置), JSON.stringify(桶.体 && 桶.体.版本))
+  报('兜底里说明了 NapCat 为什么没连上', Boolean(桶.体 && 桶.体.NapCat状态 && 桶.体.NapCat状态.错), JSON.stringify(桶.体 && 桶.体.NapCat状态))
+}
 
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
