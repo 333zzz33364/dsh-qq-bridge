@@ -679,8 +679,8 @@ const 跑一遍 = async (配置补, id, 段) => {
     }, 5000)
     入站事件.on('followup', 接到)
   })
-  轮询回调()
-  const text = await 完成
+  // 新宿主返回整轮 Promise 时也等到 finally；旧宿主返回 undefined 仍靠事件。
+  const [text] = await Promise.all([完成, 轮询回调()])
   // 排空 followup 后的 Promise continuation（含落水位），再改下一条配置。
   await 下一跳()
   return text
