@@ -29,6 +29,7 @@ const 报 = (标签, 过, 详情) => { if (!过) 挂了++; console.log(`${过 ? 
 
 // 假 fetch：记下每次 POST，回一个「发送成功」；拉历史时给一条她的新消息
 const 发了 = []
+const 请求头们 = []
 let 私聊消息文本 = '宝宝'
 let 私聊消息时间 = 9999999999
 let 私聊消息id = 9000
@@ -42,6 +43,7 @@ let 内层节点 = null           // 「转发里套转发」用的内层节点
 globalThis.fetch = async (url, 选项) => {
   const 体 = JSON.parse((选项 && 选项.body) || '{}')
   const u = String(url)
+  请求头们.push({ url: u, headers: (选项 && 选项.headers) || {} })
   if (u.includes('get_login_info')) {
     return { json: async () => ({ status: 'ok', retcode: 0, data: { user_id: 10001, nickname: '测试号' } }) }
   }
@@ -431,6 +433,33 @@ await new Promise((r) => setTimeout(r, 60))
 const 两段正文 = String(转进的.at(-1)?.content?.[0]?.text || '')
 const 段头数 = (两段正文.match(/\[合并转发的聊天记录 · 共/g) || []).length
 报('两个嵌套各展开成一段（一共 3 个「聊天记录」标题：外层 + 两个内层）', 段头数 === 3, '标题数=' + 段头数 + ' :: ' + 两段正文)
+
+// ㉕ access_token：填了「令牌」就带 Bearer，没填就照旧
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: '', 私聊QQ: '123', 群号: '',
+  转私聊: true, 转群: false, 令牌: 'my-secret-token', NapCat: 'http://127.0.0.1:3000',
+}, null, 2), 'utf8')
+私聊消息段 = null
+私聊消息文本 = '带令牌的一句'
+私聊消息id = 9060
+私聊消息时间 = Math.floor(Date.now() / 1000) + 800
+请求头们.length = 0
+const 令牌前 = 转进的.length
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 40))
+报('带令牌时轮询请求带 Authorization: Bearer', 请求头们.some((x) => String(x.headers.authorization || '') === 'Bearer my-secret-token'), JSON.stringify(请求头们.map((x) => [x.url.slice(-28), x.headers.authorization || '(无)'])))
+报('带令牌时那一轮照样转进来', 转进的.length === 令牌前 + 1)
+
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: '', 私聊QQ: '123', 群号: '',
+  转私聊: true, 转群: false, 令牌: '', NapCat: 'http://127.0.0.1:3000',
+}, null, 2), 'utf8')
+私聊消息id = 9061
+私聊消息时间 = Math.floor(Date.now() / 1000) + 900
+请求头们.length = 0
+await 轮询回调()
+await new Promise((r) => setTimeout(r, 40))
+报('没填令牌时不带 Authorization（老 NapCat 零变化）', 请求头们.length > 0 && 请求头们.every((x) => !x.headers.authorization), JSON.stringify(请求头们.map((x) => x.headers.authorization || '(无)')))
 
 rmSync(家, { recursive: true, force: true })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
