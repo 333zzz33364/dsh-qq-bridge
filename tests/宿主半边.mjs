@@ -1090,6 +1090,24 @@ const r8 = await 闸6.execute({ reply: false, reason: '在跟别人聊' })
   私聊消息们 = null
 }
 
+
+// ⭐ 1.0.4（她发的截图）：[QQ] 标记本身绝不能出现在手机上
+{
+  const 换 = (s) => String(s)
+  const 甲 = 模.抠QQ标记(换('[QQ]\n啧，本鱼都喊破音了'), false)
+  报('开关关着：正文照发，但把 [QQ] 剥掉',
+    甲.发 === true && !甲.文字.includes('[QQ]') && 甲.文字.includes('啧，本鱼都喊破音了'), JSON.stringify(甲))
+  const 乙 = 模.抠QQ标记(换('这块不发\n[QQ]发这句[/QQ]\n这块也不发'), true)
+  报('开关开着 + 有完整块：只发块里那句', 乙.发 === true && 乙.文字 === '发这句', JSON.stringify(乙))
+  const 丙 = 模.抠QQ标记(换('[QQ]\n只写了开头没写闭合'), true)
+  报('开关开着 + 忘了闭合：还是发（发 [QQ] 之后的内容）',
+    丙.发 === true && 丙.文字 === '只写了开头没写闭合' && !!丙.原因, JSON.stringify(丙))
+  const 丁 = 模.抠QQ标记(换('这轮压根没写块'), true)
+  报('开关开着 + 没写块：这一轮不发', 丁.发 === false, JSON.stringify(丁))
+  const 戊 = 模.抠QQ标记(换('[\u3000QQ\u3000]  带空格的标记也该剥'), false)
+  报('带空格的标记也剥掉', 戊.发 === true && !戊.文字.includes('QQ'), JSON.stringify(戊))
+}
+
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
