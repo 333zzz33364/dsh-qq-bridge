@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 
-// A new synthetic home per apply avoids relying on the separate restart-watermark fix.
+// A new synthetic home per apply keeps each concurrency scenario independent.
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b }); return { promise, resolve, reject } }
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate) }
 let count = 0
@@ -13,7 +13,7 @@ async function scenario(label, run) {
   const scenarioHome = mkdtempSync(join(tmpdir(), 'qq-singleflight-case-'))
   process.env.DSH_HOME = scenarioHome
   const host = await import(pathToFileURL(resolve(process.env.QQ_TEST_HOST || 'lib/host.js')).href + '?case=' + count)
-  writeFileSync(join(scenarioHome, 'qq-bridge-config.json'), JSON.stringify({ 总开关: true, 试运行: true, 收图: true, 绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X' }], NapCat: 'http://synthetic.invalid' }))
+  writeFileSync(join(scenarioHome, 'qq-bridge-config.json'), JSON.stringify({ 总开关: true, 试运行: true, 收图: true, 合并窗口秒: 0, 绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X' }], NapCat: 'http://synthetic.invalid' }))
   const effects = [], calls = [], requests = []
   let tick, stopped = false, fetchImpl, followImpl = async () => {}, admitImpl = async (content) => content
   globalThis.fetch = (...args) => { requests.push(args); return fetchImpl(...args) }

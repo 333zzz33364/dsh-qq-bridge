@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -16,25 +16,13 @@ const history = (messages = [message()]) => ({ status: 'ok', data: { messages } 
 const forward = () => ({ status: 'ok', data: { messages: [{ sender: { nickname: 'synthetic' }, content: [{ type: 'text', data: { text: 'synthetic forward' } }] }] } })
 const response = data => ({ json: async () => data })
 let serial = 0
-async function fixture({ reload = false } = {}) {
+async function fixture() {
   const home = mkdtempSync(join(tmpdir(), 'qq-lifecycle-'))
   process.env.DSH_HOME = home
-  let hostPath = resolve(process.env.QQ_TEST_HOST || 'lib/host.js')
-  if (reload) {
-    // PR #9 is independent. Combine only its Map initialization order in a temporary
-    // module so the baseline TDZ cannot mask the actual reload/late-success contract.
-    let source = readFileSync(hostPath, 'utf8')
-    const init = '  const 上次时间 = new Map()'
-    assert.equal(source.split(init).length, 2)
-    source = source.replace(init, '').replace('  const 已转消息 = new Set()', init + '\n  const 已转消息 = new Set()')
-    mkdirSync(join(home, 'lib'))
-    hostPath = join(home, 'lib', 'host.mjs')
-    writeFileSync(hostPath, source)
-    copyFileSync(resolve('lib/selfupdate.mjs'), join(home, 'lib', 'selfupdate.mjs'))
-    copyFileSync(resolve('package.json'), join(home, 'package.json'))
-  }
+  // Main includes the watermark initialization fix; reload the actual host directly.
+  const hostPath = resolve(process.env.QQ_TEST_HOST || 'lib/host.js')
   const host = await import(pathToFileURL(hostPath).href + '?lifecycle=' + ++serial)
-  writeFileSync(join(home, 'qq-bridge-config.json'), JSON.stringify({ 总开关: true, 试运行: true, 收图: false,
+  writeFileSync(join(home, 'qq-bridge-config.json'), JSON.stringify({ 总开关: true, 试运行: true, 收图: false, 合并窗口秒: 0,
     绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X' }], NapCat: 'http://synthetic.invalid' }))
   const timers = new Map(), requests = [], instances = []
   globalThis.setTimeout = (fn, ms, ...args) => {
@@ -60,8 +48,8 @@ async function fixture({ reload = false } = {}) {
   return f
 }
 let failures = 0
-async function check(label, run, options) {
-  const f = await fixture(options)
+async function check(label, run) {
+  const f = await fixture()
   try { await run(f); console.log('PASS ' + label) }
   catch (error) { failures++; console.error('FAIL ' + label + ': ' + error.stack) }
   finally { f.close() }
@@ -89,7 +77,7 @@ await check('late success survives newer instance writes and reload does not red
   const reloaded = f.mount()
   f.fetch(async () => response(history([message(), message(2, 10000000001)])))
   await reloaded.tick(); assert.equal(reloaded.calls.length, 0)
-}, { reload: true })
+})
 
 for (const action of ['history', 'forward']) for (const phase of ['fetch', 'json']) {
   await check(`${action} ${phase} deadline releases lock, retries, and ignores late completion`, async f => {
