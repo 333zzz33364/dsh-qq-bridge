@@ -34,6 +34,7 @@ let 私聊消息文本 = '宝宝'
 let 私聊消息时间 = 1700000000
 let 私聊消息id = 9000
 let 私聊消息段 = null          // 给「卡片 / 合并转发」用：设了就替掉默认的 text 段
+let 私聊消息们 = null          // 1.0.2：设了就用这一串（测「攒成一条」）
 let 转发节点 = null            // get_forward_msg 假数据
 let 群消息文本 = '群里的话'
 let 群消息时间 = 1700000000
@@ -48,12 +49,10 @@ globalThis.fetch = async (url, 选项) => {
     return { json: async () => ({ status: 'ok', retcode: 0, data: { user_id: 10001, nickname: '测试号' } }) }
   }
   if (u.includes('get_friend_msg_history')) {
+    const 们 = 私聊消息们 || [{ user_id: 123, time: 私聊消息时间, message_id: 私聊消息id, message_type: 'private',
+      message: 私聊消息段 || [{ type: 'text', data: { text: 私聊消息文本 } }] }]
     return {
-      json: async () => ({
-        status: 'ok', retcode: 0,
-        data: { messages: [{ user_id: 123, time: 私聊消息时间, message_id: 私聊消息id, message_type: 'private',
-          message: 私聊消息段 || [{ type: 'text', data: { text: 私聊消息文本 } }] }] },
-      }),
+      json: async () => ({ status: 'ok', retcode: 0, data: { messages: 们 } }),
     }
   }
   if (u.includes('get_group_msg_history')) {
@@ -78,6 +77,7 @@ globalThis.fetch = async (url, 选项) => {
 }
 
 process.env.QQ_BRIDGE_探活超时 = '300'   // 让「NapCat 不回应」那条测试 0.3 秒就有结果
+process.env.QQ_BRIDGE_不加速 = '1'       // 攒消息的「补跑一跳」别插进测试里
 const 模 = await import(new URL('../lib/host.js', import.meta.url).href + '?v=' + Date.now())
 
 // ---------- 纯函数 ----------
@@ -963,6 +963,72 @@ const r8 = await 闸6.execute({ reply: false, reason: '在跟别人聊' })
   报('超时生效（0.3 秒超时 → 1 秒内回来）', 用时 < 1500, 用时 + 'ms')
   报('兜底里仍然有版本和配置', Boolean(桶.体 && 桶.体.版本 && 桶.体.配置), JSON.stringify(桶.体 && 桶.体.版本))
   报('兜底里说明了 NapCat 为什么没连上', Boolean(桶.体 && 桶.体.NapCat状态 && 桶.体.NapCat状态.错), JSON.stringify(桶.体 && 桶.体.NapCat状态))
+}
+
+// ⭐ 1.0.2：连着发的几条攒成一条（别处报的「发一串图，DSH 一张一张回」）
+{
+  const 段 = (文) => [{ type: 'text', data: { text: 文 } }]
+  const 睡 = (毫秒) => new Promise((r) => setTimeout(r, 毫秒))
+  const 写 = (号, 窗口) => writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+    总开关: true, 试运行: false, 目标会话: 'session-X', 私聊QQ: 号, 群号: '',
+    转私聊: true, 转群: false, NapCat: 'http://127.0.0.1:3000', 合并窗口秒: 窗口,
+  }, null, 2), 'utf8')
+
+  // ① 三条都已经「说完」了 → 一次转成一条（用将来的时间戳，省得跟水位打架）
+  const 现在1 = Math.floor(Date.now() / 1000)
+  写('781', 3)
+  私聊消息们 = []
+  await 轮询回调()                     // 先让它给这个号记个水位
+  私聊消息们 = [
+    { user_id: 781, time: 现在1 + 5, message_id: 9501, message_type: 'private', message: 段('图一') },
+    { user_id: 781, time: 现在1 + 6, message_id: 9502, message_type: 'private', message: 段('图二') },
+    { user_id: 781, time: 现在1 + 7, message_id: 9503, message_type: 'private', message: 段('图三') },
+  ]
+  const 前1 = 转进的.length
+  await 轮询回调()
+  await 睡(60)
+  报('连着发的三条 → 只转成一条', 转进的.length === 前1 + 1, '转进 ' + (转进的.length - 前1) + ' 条')
+  const 攒好的 = String((转进的.at(-1) || { content: [{}] }).content[0].text || '')
+  报('那一条里三条都在', 攒好的.includes('图一') && 攒好的.includes('图二') && 攒好的.includes('图三'), 攒好的.slice(0, 120))
+
+  // ② 最后一条刚发完（在合并窗口里）→ 先攒着，不转
+  const 现在2 = Math.floor(Date.now() / 1000)
+  写('782', 1)
+  私聊消息们 = []
+  await 轮询回调()                     // 记水位
+  await 睡(1100)
+  const 现在3 = Math.floor(Date.now() / 1000)
+  私聊消息们 = [
+    { user_id: 782, time: 现在3, message_id: 9511, message_type: 'private', message: 段('还在发一') },
+    { user_id: 782, time: 现在3, message_id: 9512, message_type: 'private', message: 段('还在发二') },
+  ]
+  const 前2 = 转进的.length
+  await 轮询回调()
+  await 睡(60)
+  报('最后一条刚发完 → 先不转（等对方说完）', 转进的.length === 前2, '转进 ' + (转进的.length - 前2) + ' 条')
+
+  // ③ 窗口过去了 → 下一跳把它俩一起转
+  await 睡(1400)
+  await 轮询回调()
+  await 睡(60)
+  报('窗口过去后 → 两条一起转', 转进的.length === 前2 + 1, '转进 ' + (转进的.length - 前2) + ' 条')
+  const 后补 = String((转进的.at(-1) || { content: [{}] }).content[0].text || '')
+  报('后补的那条里两条都在', 后补.includes('还在发一') && 后补.includes('还在发二'), 后补.slice(0, 120))
+
+  // ④ 合并窗口 0 → 回到「来一条转一条」
+  const 现在4 = Math.floor(Date.now() / 1000)
+  写('783', 0)
+  私聊消息们 = []
+  await 轮询回调()
+  私聊消息们 = [
+    { user_id: 783, time: 现在4 + 5, message_id: 9521, message_type: 'private', message: 段('一条一') },
+    { user_id: 783, time: 现在4 + 6, message_id: 9522, message_type: 'private', message: 段('一条二') },
+  ]
+  const 前3 = 转进的.length
+  await 轮询回调()
+  await 睡(80)
+  报('合并窗口 0 → 来一条转一条（不攒）', 转进的.length === 前3 + 2, '转进 ' + (转进的.length - 前3) + ' 条')
+  私聊消息们 = null
 }
 
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
