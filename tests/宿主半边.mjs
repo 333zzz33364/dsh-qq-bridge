@@ -1107,7 +1107,25 @@ const r8 = await 闸6.execute({ reply: false, reason: '在跟别人聊' })
   const 戊 = 模.抠QQ标记(换('[\u3000QQ\u3000]  带空格的标记也该剥'), false)
   报('带空格的标记也剥掉', 戊.发 === true && !戊.文字.includes('QQ'), JSON.stringify(戊))
 }
-
+// 模拟插件重启：每次 apply 重新创建内存状态，只从临时磁盘恢复。
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false, 补投窗口分: 60, NapCat: 'http://127.0.0.1:3000',
+  绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X', 称呼: '小明' }],
+}), 'utf8')
+const 重启时间 = Math.floor(Date.now() / 1000)
+async function 重启拉取(水位值, 已转, id, time) {
+  writeFileSync(状态文件, JSON.stringify({ 上次: { '私聊:123': 水位值 }, 已转 }), 'utf8')
+  私聊消息人 = 123; 私聊消息段 = null; 私聊消息文本 = '重启恢复测试'; 私聊消息id = id; 私聊消息时间 = time
+  let tick
+  模.apply({ ...ctx, on: () => () => {}, webServer: { register: () => () => {} }, interval: (fn) => { tick = fn; return () => {} } })
+  const before = 转进的.length
+  tick()
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  return 转进的.length - before
+}
+报('模拟重启：恢复水位后接收启动前尚未处理的新消息', await 重启拉取(重启时间 - 60, [9901], 9902, 重启时间 - 30) === 1)
+报('模拟重启：同水位时间的已转消息 ID 不重投', await 重启拉取(重启时间 + 60, [9903], 9903, 重启时间 + 60) === 0)
+报('模拟重启：水位前未登记 ID 的旧消息不重投', await 重启拉取(重启时间 + 60, [9903], 9904, 重启时间 + 59) === 0)
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
