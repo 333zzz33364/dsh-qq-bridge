@@ -35,12 +35,14 @@ let 私聊消息时间 = 1700000000
 let 私聊消息id = 9000
 let 私聊消息段 = null          // 给「卡片 / 合并转发」用：设了就替掉默认的 text 段
 let 私聊消息们 = null          // 1.0.2：设了就用这一串（测「攒成一条」）
+let 私聊消息人 = 123           // 1.0.3：测「另一条绑定」时换成别的号
 let 转发节点 = null            // get_forward_msg 假数据
 let 群消息文本 = '群里的话'
 let 群消息时间 = 1700000000
 let 群消息id = 9100
 let 群消息段 = null          // 给群消息用（跟私聊那个一样）
 let 内层节点 = null           // 「转发里套转发」用的内层节点
+let 深层节点 = null           // 1.0.3：第三层转发（fw-deep）
 globalThis.fetch = async (url, 选项) => {
   const 体 = JSON.parse((选项 && 选项.body) || '{}')
   const u = String(url)
@@ -49,7 +51,7 @@ globalThis.fetch = async (url, 选项) => {
     return { json: async () => ({ status: 'ok', retcode: 0, data: { user_id: 10001, nickname: '测试号' } }) }
   }
   if (u.includes('get_friend_msg_history')) {
-    const 们 = 私聊消息们 || [{ user_id: 123, time: 私聊消息时间, message_id: 私聊消息id, message_type: 'private',
+    const 们 = 私聊消息们 || [{ user_id: 私聊消息人, time: 私聊消息时间, message_id: 私聊消息id, message_type: 'private',
       message: 私聊消息段 || [{ type: 'text', data: { text: 私聊消息文本 } }] }]
     return {
       json: async () => ({ status: 'ok', retcode: 0, data: { messages: 们 } }),
@@ -70,7 +72,8 @@ globalThis.fetch = async (url, 选项) => {
   if (u.includes('get_forward_msg')) {
     const 是谁 = JSON.stringify(体)
     const 内层 = 是谁.includes('fw-inner')
-    return { json: async () => ({ status: 'ok', retcode: 0, data: { messages: (内层 ? 内层节点 : 转发节点) || [] } }) }
+    const 深层 = 是谁.includes('fw-deep')
+    return { json: async () => ({ status: 'ok', retcode: 0, data: { messages: (深层 ? 深层节点 : (内层 ? 内层节点 : 转发节点)) || [] } }) }
   }
   发了.push({ url: u, 体 })
   return { json: async () => ({ status: 'ok', retcode: 0, data: { message_id: 1 } }) }
@@ -964,6 +967,62 @@ const r8 = await 闸6.execute({ reply: false, reason: '在跟别人聊' })
   报('兜底里仍然有版本和配置', Boolean(桶.体 && 桶.体.版本 && 桶.体.配置), JSON.stringify(桶.体 && 桶.体.版本))
   报('兜底里说明了 NapCat 为什么没连上', Boolean(桶.体 && 桶.体.NapCat状态 && 桶.体.NapCat状态.错), JSON.stringify(桶.体 && 桶.体.NapCat状态))
 }
+
+// ⭐ 1.0.3（issue #13）①：转发套三层，第三层也要看得到
+{
+  深层节点 = [{ sender: { nickname: '阿戊' }, content: [{ type: 'text', data: { text: '第三层的话' } }] }]
+  内层节点 = [{ sender: { nickname: '阿丙' }, content: [{ type: 'forward', data: { id: 'fw-deep' } }] }]
+  转发节点 = [{ sender: { nickname: '阿甲' }, content: [{ type: 'forward', data: { id: 'fw-inner' } }] }]
+  私聊消息人 = 789
+  私聊消息段 = [{ type: 'forward', data: { id: 'fw-outer3' } }]
+  私聊消息id = 9055
+  私聊消息时间 = Math.floor(Date.now() / 1000) + 720
+  writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+    总开关: true, 试运行: false, 私聊会话: 'session-X', 群会话: '',
+    绑定: [{ 类型: '私聊', 号码: '789', 会话: 'session-X' }],
+    私聊QQ: '789', 群号: '', 转私聊: true, 转群: false, 收图: true, NapCat: 'http://127.0.0.1:3000',
+  }, null, 2), 'utf8')
+  await 轮询回调()
+  await new Promise((r) => setTimeout(r, 80))
+  const 深文 = String(转进的.at(-1)?.content?.[0]?.text || '')
+  报('三层的转发：第三层的话也看得到（issue #13）', 深文.includes('第三层的话'), 深文.slice(0, 200))
+
+  // ②：第四层实在套太深 → 截断时必须带上「还有几条」
+  深层节点 = [{ sender: { nickname: '阿戊' }, content: [{ type: 'forward', data: { id: 'fw-inner' } }] }]
+  私聊消息id = 9056
+  私聊消息时间 = Math.floor(Date.now() / 1000) + 740
+  await 轮询回调()
+  await new Promise((r) => setTimeout(r, 80))
+  const 截断文 = String(转进的.at(-1)?.content?.[0]?.text || '')
+  报('套太深时会说「里面还有 N 条」而不是干截断', /里面还有 \d+ 条转发/.test(截断文), 截断文.slice(-160))
+}
+
+// ⭐ 1.0.3（issue #13）②：大表情没有 url → 至少留一句，别让整条消失
+{
+  深层节点 = null
+  私聊消息段 = [{ type: 'mface', data: { summary: '[大表情]', emoji_id: 'abc123' } }]
+  私聊消息id = 9270
+  私聊消息时间 = Math.floor(Date.now() / 1000) + 760
+  const 前m = 转进的.length
+  await 轮询回调()
+  await new Promise((r) => setTimeout(r, 60))
+  报('大表情（没 url）也转进来了，不会被当成空消息丢掉', 转进的.length === 前m + 1, '转进 ' + (转进的.length - 前m) + ' 条')
+  const 表情文 = String(转进的.at(-1)?.content?.[0]?.text || '')
+  报('大表情留下「[表情:…]」让人知道发了啥', /\[表情[:：]/.test(表情文), 表情文.slice(0, 120))
+
+  // 图有 url 但一张都取不到 → 也要说清楚（不然「没字没图」会被丢掉）
+  私聊消息段 = [{ type: 'image', data: { url: 'http://127.0.0.1:9/nope.png' } }]
+  私聊消息id = 9271
+  私聊消息时间 = Math.floor(Date.now() / 1000) + 780
+  const 前图 = 转进的.length
+  await 轮询回调()
+  await new Promise((r) => setTimeout(r, 120))
+  报('图全都没取到 → 照样转进来（不静默丢）', 转进的.length === 前图 + 1, '转进 ' + (转进的.length - 前图) + ' 条')
+  const 失败文 = String(转进的.at(-1)?.content?.[0]?.text || '')
+  报('还会说明「一张都没取到」', 失败文.includes('一张都没取到'), 失败文.slice(-120))
+  私聊消息段 = null
+}
+
 
 // ⭐ 1.0.2：连着发的几条攒成一条（别处报的「发一串图，DSH 一张一张回」）
 {
