@@ -26,8 +26,8 @@ async function fixture() {
     绑定: [{ 类型: '私聊', 号码: '123', 会话: 'session-X' }], NapCat: 'http://synthetic.invalid' }))
   const timers = new Map(), requests = [], instances = []
   globalThis.setTimeout = (fn, ms, ...args) => {
-    if (ms !== 15000) return originalTimeout(fn, ms, ...args)
-    const id = {}; timers.set(id, fn); return id
+    if (ms < 5000) return originalTimeout(fn, ms, ...args)
+    const id = {}; timers.set(id, { fn, ms }); return id
   }
   globalThis.clearTimeout = id => timers.delete(id) || originalClear(id)
   let fetchImpl = async () => response(history())
@@ -42,7 +42,8 @@ async function fixture() {
     instances.push(instance); return instance
   }
   const f = { mount, requests, fetch: fn => { fetchImpl = fn }, deadlineCount: () => timers.size,
-    expire: () => [...timers.values()].forEach(fn => fn()), state: () => JSON.parse(readFileSync(join(home, 'qq-bridge-state.json'), 'utf8')),
+    deadlineMillis: () => [...timers.values()].map(timer => timer.ms),
+    expire: () => [...timers.values()].forEach(timer => timer.fn()), state: () => JSON.parse(readFileSync(join(home, 'qq-bridge-state.json'), 'utf8')),
     save: state => writeFileSync(join(home, 'qq-bridge-state.json'), JSON.stringify(state)),
     close() { instances.forEach(i => i.dispose()); globalThis.setTimeout = originalTimeout; globalThis.clearTimeout = originalClear; globalThis.fetch = originalFetch; rmSync(home, { recursive: true, force: true }) } }
   return f
@@ -88,6 +89,7 @@ for (const action of ['history', 'forward']) for (const phase of ['fetch', 'json
       return phase === 'fetch' ? gate.promise : { json: () => gate.promise }
     })
     const pending = a.tick(); await settle(); assert.equal(blocked, true); assert.equal(f.deadlineCount(), 1)
+    assert.deepEqual(f.deadlineMillis(), [8000])
     const request = f.requests.at(-1)
     f.expire(); await pending
     assert.equal(request[1].signal.aborted, true); assert.equal(f.deadlineCount(), 0); assert.equal(a.calls.length, 0)

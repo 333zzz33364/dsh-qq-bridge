@@ -48,13 +48,14 @@ async function fixture(options = {}) {
       follow: fn => { follow = fn }, admit: fn => { admit = fn }, flush: fn => { flush = fn } }
     instances.push(instance); return instance
   }
-  const matchingTimers = ms => [...timers.values()].filter(t => ms === undefined ? t.ms !== 15000 : t.ms === ms)
+  const readDeadline = timer => timer.ms === 5000 || timer.ms === 8000
+  const matchingTimers = () => [...timers.values()].filter(t => !readDeadline(t))
   const fire = timer => { assert.ok(timer, 'expected timer'); timers.delete(timer); return timer.fn() }
   return { key, message, mount, configure, requests, defaultFetch, advance: ms => { now += ms },
     messages: value => { messages = value }, fetch: fn => { fetchImpl = fn },
     historyCalls: () => requests.filter(([url]) => url.endsWith('_msg_history')).length,
-    fastTimers: () => matchingTimers(), deadlines: () => matchingTimers(15000),
-    fireFast: () => fire(matchingTimers()[0]), expire: () => matchingTimers(15000).forEach(fire),
+    fastTimers: () => matchingTimers(), deadlines: () => [...timers.values()].filter(readDeadline),
+    fireFast: () => fire(matchingTimers()[0]), expire: () => [...timers.values()].filter(readDeadline).forEach(fire),
     state: () => JSON.parse(readFileSync(join(home, 'qq-bridge-state.json'), 'utf8')),
     save: state => writeFileSync(join(home, 'qq-bridge-state.json'), JSON.stringify(state)),
     close() {
@@ -196,13 +197,32 @@ for (const phase of ['fetch', 'json']) await check(`login lookup ${phase} shares
   f.messages([f.message(1, { age: 2 })])
   f.fetch(url => url.endsWith('/get_login_info') ? phase === 'fetch' ? gate.promise : Promise.resolve({ json: () => gate.promise }) : f.defaultFetch(url))
   const pending = a.tick(); await settle(); const deadlineCount = f.deadlines().length
+  const deadlineMillis = f.deadlines().map(timer => timer.ms)
   const request = f.requests.at(-1)
   f.expire()
   gate.resolve(phase === 'fetch' ? response({ user_id: 10001 }) : { status: 'ok', data: { user_id: 10001 } })
   await pending; const lateCalls = a.calls.length
   f.fetch(null); await a.tick()
   assert.equal(deadlineCount, 1); assert.equal(request[1].signal?.aborted, true)
+  assert.deepEqual(deadlineMillis, [5000])
   assert.equal(lateCalls, 0); assert.equal(a.calls.length, 1); assert.equal(f.deadlines().length, 0)
 })
+
+for (const source of ['regular', 'fast']) for (const duration of [3000, 3001]) {
+  await check(`${source} polling reports ${duration} ms once per task, never per overlapping tick`, async f => {
+    const a = f.mount(); await a.tick(); const savedFast = f.fastTimers()[0].fn; f.advance(2000)
+    const gate = deferred()
+    f.fetch(url => url.endsWith('_msg_history') ? gate.promise : f.defaultFetch(url))
+    const pending = source === 'regular' ? a.tick() : f.fireFast()
+    const joined = [a.tick(), savedFast(), a.tick()]
+    await settle(); assert.deepEqual(f.deadlines().map(timer => timer.ms), [8000])
+    f.advance(duration); gate.resolve(response({ messages: [f.message(1, { age: 10 })] }))
+    await Promise.all([pending, ...joined])
+    assert.ok(joined.every(task => task === pending)); assert.equal(f.historyCalls(), 2)
+    const diagnostics = a.bridge.日志.filter(entry => entry.文本.startsWith('这一次收消息花了 '))
+    assert.equal(diagnostics.length, duration > 3000 ? 1 : 0)
+    if (diagnostics.length) assert.match(diagnostics[0].文本, /超过 8 秒的请求会被掐掉重试/)
+  })
+}
 
 process.exitCode = failures ? 1 : 0
