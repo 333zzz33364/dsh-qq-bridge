@@ -53,6 +53,7 @@ let 私聊消息id = 9000
 let 私聊消息段 = null          // 给「卡片 / 合并转发」用：设了就替掉默认的 text 段
 let 私聊消息们 = null          // 1.0.2：设了就用这一串（测「攒成一条」）
 let 私聊消息人 = 123           // 1.0.3：测「另一条绑定」时换成别的号
+let 发送者昵称 = ''            // 1.2.1：测「私聊署名」时给个昵称
 let 转发节点 = null            // get_forward_msg 假数据
 let 转发拉取次数 = 0           // ⭐ 1.1.5：数「同一条转发被重拉了几次」
 let 群消息文本 = '群里的话'
@@ -70,6 +71,7 @@ globalThis.fetch = async (url, 选项) => {
   }
   if (u.includes('get_friend_msg_history')) {
     const 们 = 私聊消息们 || [{ user_id: 私聊消息人, time: 私聊消息时间, message_id: 私聊消息id, message_type: 'private',
+      sender: 发送者昵称 ? { nickname: 发送者昵称 } : undefined,
       message: 私聊消息段 || [{ type: 'text', data: { text: 私聊消息文本 } }] }]
     return {
       json: async () => ({ status: 'ok', retcode: 0, data: { messages: 们 } }),
@@ -1268,6 +1270,8 @@ async function 重启拉取(水位值, 已转, id, time) {
     私聊消息人 = 789
     私聊消息段 = null
     私聊消息文本 = '从手机发的话'
+    私聊消息们 = null
+    发送者昵称 = '小鱿鱼'
     const 序 = Math.floor(Date.now() % 1000)
     私聊消息id = 9600 + 序
     私聊消息时间 = Math.floor(Date.now() / 1000) + 1000
@@ -1281,7 +1285,7 @@ async function 重启拉取(水位值, 已转, id, time) {
   const 前2 = await 试私聊('前缀')
   报('开了「前缀」：开头是 [QQ]', 前2.startsWith('[QQ] ') && 前2.includes('从手机发的话'), 前2)
   const 署 = await 试私聊('署名')
-  报('开了「署名」：带上昵称', /：从手机发的话/.test(署) && 署.includes('从手机发的话'), 署)
+  报('开了「署名」：昵称 + 号一起带', 署.includes('小鱿鱼（789）：从手机发的话'), 署)
 }
 
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
