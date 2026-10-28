@@ -122,13 +122,14 @@ await check('a repeated history ID is included only once inside a pending batch'
   assert.deepEqual(f.state().已转, [1, 2])
 })
 
-await check('different senders remain separate and disposal after the first batch prevents the next', async f => {
+// ⭐ 1.0.9：群里换人**也照攒**（以前换人就切开 → 两个人说话起两轮）
+await check('group batches across senders into one followup and disposal prevents any second batch', async f => {
   f.messages([f.message(1, { age: 2 }), f.message(2, { age: 2, user: 124 })])
   const a = f.mount(), gate = deferred(); a.follow(() => gate.promise)
   const pending = a.tick(); await settle(); const started = a.calls.length
   a.dispose(); gate.resolve(); await pending
-  assert.equal(started, 1); assert.equal(a.calls.length, 1); assert.deepEqual(f.state().已转, [1])
-}, { group: true })
+  assert.equal(started, 1); assert.equal(a.calls.length, 1); assert.deepEqual(f.state().已转, [1, 2])
+}, { group: true, config: { 回复冷却秒: 0 } })
 
 await check('zero merge window keeps individual delivery and retries a rejected batch', async f => {
   f.messages([f.message(1), f.message(2)])
@@ -224,5 +225,58 @@ for (const source of ['regular', 'fast']) for (const duration of [3000, 3001]) {
     if (diagnostics.length) assert.match(diagnostics[0].文本, /超过 8 秒的请求会被掐掉重试/)
   })
 }
+
+// ⭐ 1.0.9：群聊的节奏（冷却 / 封顶 / 跨人合并）
+await check('group batch in cooldown is held, not dropped, and goes out once the cooldown passes', async f => {
+  f.messages([f.message(1, { age: 2 })])
+  const a = f.mount(); await a.tick()
+  assert.equal(a.calls.length, 1)                     // 第一批发得出去
+  f.messages([f.message(1, { age: 2 }), f.message(2, { age: 1 })])
+  await a.tick()
+  assert.equal(a.calls.length, 1)                     // 冷却里：这一批先挂着
+  assert.deepEqual(f.state().已转, [1])
+  assert.ok(f.fastTimers().length >= 1)               // 约好冷完再来
+  f.advance(6000); await f.fireFast(); await settle()
+  assert.equal(a.calls.length, 2)                     // 冷完了，补发出去
+  assert.deepEqual(f.state().已转, [1, 2])
+}, { group: true, config: { 合并窗口秒: 0, 回复冷却秒: 5 } })
+
+await check('group per-minute cap holds the batch and releases it once the window frees', async f => {
+  f.messages([f.message(1, { age: 2 })])
+  const a = f.mount()
+  await a.tick(); assert.equal(a.calls.length, 1)     // 这一分钟的名额用掉了
+  f.messages([f.message(1, { age: 2 }), f.message(2, { age: 1 })])
+  await a.tick(); await settle()
+  assert.equal(a.calls.length, 1)                     // 撞上「一分钟最多 1 条」→ 挂着，不回也不丢
+  assert.deepEqual(f.state().已转, [1])
+  assert.ok(f.fastTimers().length >= 1)
+  f.advance(61000); await f.fireFast(); await settle()
+  assert.equal(a.calls.length, 2)                     // 名额滑出来了，补发
+  assert.deepEqual(f.state().已转, [1, 2])
+}, { group: true, config: { 合并窗口秒: 0, 回复冷却秒: 0, 每分钟最多条: 1 } })
+
+await check('group batch merges different senders and keeps every name inline', async f => {
+  f.messages([f.message(1, { age: 2, user: 123 }), f.message(2, { age: 2, user: 124 })])
+  const a = f.mount(); await a.tick()
+  assert.equal(a.calls.length, 1)
+  const text = String(a.calls[0].content[0].text)
+  assert.match(text, /synthetic-1/)
+  assert.match(text, /synthetic-2/)
+  assert.equal((text.match(/（\d+）：/g) || []).length, 2)   // 两行各带一次名字
+}, { group: true, config: { 合并窗口秒: 1, 回复冷却秒: 0, 合并最多条: 8 } })
+
+await check('group reply probability 0 skips the batch entirely: no followup, water mark advanced', async f => {
+  f.messages([f.message(1, { age: 2 })])
+  const a = f.mount(); await a.tick(); await settle()
+  assert.equal(a.calls.length, 0)                     // 没掷中 → 压根不送进来
+  assert.deepEqual(f.state().已转, [1])                // 但也记下了，不会反复拉
+  assert.ok(a.bridge.日志.some(entry => entry.文本.includes('没掷中')))
+}, { group: true, config: { 合并窗口秒: 0, 回复冷却秒: 0, 回复概率: 0 } })
+
+await check('group reply probability 100 keeps every batch', async f => {
+  f.messages([f.message(1, { age: 2 })])
+  const a = f.mount(); await a.tick(); await settle()
+  assert.equal(a.calls.length, 1)
+}, { group: true, config: { 合并窗口秒: 0, 回复冷却秒: 0, 回复概率: 100 } })
 
 process.exitCode = failures ? 1 : 0

@@ -7,7 +7,7 @@
 //   5) /state 路由能回出配置和 NapCat 探活结果
 // 跑法： node tests/宿主半边.mjs
 
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync as 原写文件, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
@@ -15,6 +15,21 @@ import { setImmediate as 下一跳 } from 'node:timers/promises'
 
 const 家 = mkdtempSync(join(tmpdir(), 'qq-bridge-'))
 process.env.DSH_HOME = 家
+
+// ⭐ 1.0.9：这一份测的是「转进来」这件事本身，不是群聊的节奏 ——
+//   所以每次写配置都顺手把「回复冷却」关掉（不然群的那批会被冷却挂住，后面全乱）。
+//   群聊节奏另有自己的测试（tests/群节奏.mjs）。
+const writeFileSync = (路, 数据, ...余) => {
+  if (String(路).endsWith('qq-bridge-config.json')) {
+    try {
+      const o = JSON.parse(String(数据))
+      if (o.回复冷却秒 === undefined) o.回复冷却秒 = 0
+      if (o.每分钟最多条 === undefined) o.每分钟最多条 = 999
+      数据 = JSON.stringify(o, null, 2)
+    } catch (e) {}
+  }
+  return 原写文件(路, 数据, ...余)
+}
 
 // 先把配置写好（总开关开、真发、私聊 123）
 writeFileSync(
