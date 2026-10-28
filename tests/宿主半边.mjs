@@ -54,6 +54,7 @@ let 私聊消息段 = null          // 给「卡片 / 合并转发」用：设�
 let 私聊消息们 = null          // 1.0.2：设了就用这一串（测「攒成一条」）
 let 私聊消息人 = 123           // 1.0.3：测「另一条绑定」时换成别的号
 let 转发节点 = null            // get_forward_msg 假数据
+let 转发拉取次数 = 0           // ⭐ 1.1.5：数「同一条转发被重拉了几次」
 let 群消息文本 = '群里的话'
 let 群消息时间 = 1700000000
 let 群消息id = 9100
@@ -87,6 +88,7 @@ globalThis.fetch = async (url, 选项) => {
     return { ok: true, arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer }
   }
   if (u.includes('get_forward_msg')) {
+    转发拉取次数 += 1
     const 是谁 = JSON.stringify(体)
     const 内层 = 是谁.includes('fw-inner')
     const 深层 = 是谁.includes('fw-deep')
@@ -1036,6 +1038,28 @@ const r8 = await 闸6.execute({ reply: false, reason: '在跟别人聊' })
   await new Promise((r) => setTimeout(r, 80))
   const 截断文 = String(转进的.at(-1)?.content?.[0]?.text || '')
   报('套太深时会说「里面还有 N 条」而不是干截断', /里面还有 \d+ 条转发/.test(截断文), 截断文.slice(-160))
+}
+
+// ⭐ 1.1.5（issue #16）：同一条「取不到」的合并转发，别每 2 秒重拉一遍刷爆日志
+{
+  深层节点 = null
+  内层节点 = null
+  转发节点 = []        // ← 取不到，就像 NapCat 一直报错
+  私聊消息人 = 789
+  私聊消息段 = [{ type: 'forward', data: { id: 'fw-坏掉的' } }]
+  私聊消息id = 9300
+  私聊消息时间 = Math.floor(Date.now() / 1000) + 750
+  转发拉取次数 = 0
+  await 轮询回调()
+  await new Promise((r) => setTimeout(r, 80))
+  const 第一次 = 转发拉取次数
+  await 轮询回调()
+  await new Promise((r) => setTimeout(r, 80))
+  const 第二次 = 转发拉取次数
+  报('取不到的转发：第一次会拉一次', 第一次 >= 1, String(第一次))
+  报('取不到的转发：下一跳不再重拉（缓存兜住）', 第二次 === 第一次, 第一次 + ' → ' + 第二次)
+  报('取不到也要有话说，不是静默丢掉', String(转进的.at(-1)?.content?.[0]?.text || '').includes('内容取不到'))
+  转发节点 = null
 }
 
 // ⭐ 1.0.3（issue #13）②：大表情没有 url → 至少留一句，别让整条消失
