@@ -279,6 +279,20 @@ await check('group reply probability 100 keeps every batch', async f => {
   assert.equal(a.calls.length, 1)
 }, { group: true, config: { 合并窗口秒: 0, 回复冷却秒: 0, 回复概率: 100 } })
 
+// ⭐ 1.1.3：@ / 引用 的批次 —— 「点名必回」开着不掷骰子，关掉就照样掷
+await check('点名必回开着：@ 它的消息不看概率，一定回', async f => {
+  f.messages([f.message(1, { age: 2, segments: [{ type: 'at', data: { qq: '10001' } }, { type: 'text', data: { text: '在吗' } }] })])
+  const a = f.mount(); await a.tick(); await settle()
+  assert.equal(a.calls.length, 1)
+}, { group: true, config: { 合并窗口秒: 0, 回复冷却秒: 0, 回复概率: 0, 点名必回: true, 群里听所有人: true } })
+
+await check('点名必回关掉：@ 它的消息也掷骰子，概率 0 就不回', async f => {
+  f.messages([f.message(1, { age: 2, segments: [{ type: 'at', data: { qq: '10001' } }, { type: 'text', data: { text: '在吗' } }] })])
+  const a = f.mount(); await a.tick(); await settle()
+  assert.equal(a.calls.length, 0)
+  assert.ok(a.bridge.日志.some(entry => entry.文本.includes('没掷中')))
+}, { group: true, config: { 合并窗口秒: 0, 回复冷却秒: 0, 回复概率: 0, 点名必回: false, 群里听所有人: true } })
+
 // ⭐ 1.1.1（她定的）：人设只走系统提示词 —— 挂不上就**不塞进消息里**
 await check('persona never rides the message, even when the agent has no system prompt', async f => {
   f.messages([f.message(1, { age: 2 })])
