@@ -74,5 +74,30 @@ const 要有 = ['通到 QQ', '总开关', '试运行', '绑定', '总览', '发�
 const 缺 = 要有.filter((x) => !文.includes(x))
 报('关键元素都渲染出来（含连接状态 + 目标会话标题）', 缺.length === 0, 缺.length ? '缺：' + 缺.join('、') : 文.length + ' 字节')
 
+// ⭐ 1.1.0：点进「绑定」页 —— 人设卡、那一列「单独」都得出来
+const 找按钮 = (节点, 文字) => {
+  if (!节点 || typeof 节点 !== 'object') return null
+  if (Array.isArray(节点)) {
+    for (const x of 节点) {
+      const r = 找按钮(x, 文字)
+      if (r) return r
+    }
+    return null
+  }
+  if (Array.isArray(节点.kids) && 节点.kids.includes(文字) && 节点.p && typeof 节点.p.onClick === 'function') return 节点
+  return 找按钮(节点.kids, 文字)
+}
+const 绑定钮 = 找按钮(树, '绑定')
+报('能找到「绑定」页签', Boolean(绑定钮))
+if (绑定钮) {
+  绑定钮.p.onClick()
+  下标 = 0
+  const 树2 = 组件()
+  const 文2 = JSON.stringify(树2)
+  const 要有2 = ['人设（选填）', '给聊天带上人设', '单独', '群里怎么回（对所有群生效）', '两条之间至少隔（秒）']
+  const 缺2 = 要有2.filter((x) => !文2.includes(x))
+  报('绑定页里人设卡 + 那一列都在', 缺2.length === 0, 缺2.length ? '缺：' + 缺2.join('、') : 文2.length + ' 字节')
+}
+
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1

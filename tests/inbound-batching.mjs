@@ -279,4 +279,19 @@ await check('group reply probability 100 keeps every batch', async f => {
   assert.equal(a.calls.length, 1)
 }, { group: true, config: { 合并窗口秒: 0, 回复冷却秒: 0, 回复概率: 100 } })
 
+// ⭐ 1.1.0：人设 —— 挂不上系统提示词（测试里的假 agent 就没有）时，跟着消息一起带
+await check('persona rides the message when the agent has no system prompt', async f => {
+  f.messages([f.message(1, { age: 2 })])
+  const a = f.mount(); await a.tick()
+  assert.equal(a.calls.length, 1)
+  assert.match(String(a.calls[0].content[0].text), /你是小满/)
+}, { config: { 合并窗口秒: 0, 回复冷却秒: 0, 人设开: true, 人设: '你是小满，说话很短。' } })
+
+await check('persona stays out of the message when the switch is off', async f => {
+  f.messages([f.message(1, { age: 2 })])
+  const a = f.mount(); await a.tick()
+  assert.equal(a.calls.length, 1)
+  assert.ok(!String(a.calls[0].content[0].text).includes('你是小满'))
+}, { config: { 合并窗口秒: 0, 回复冷却秒: 0, 人设开: false, 人设: '你是小满，说话很短。' } })
+
 process.exitCode = failures ? 1 : 0
