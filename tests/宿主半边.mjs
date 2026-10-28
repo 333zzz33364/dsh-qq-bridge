@@ -1217,6 +1217,47 @@ async function 重启拉取(水位值, 已转, id, time) {
   报('盘上那个会话的标题也读出来了', 清单.some((x) => String(x.标题 || x.名 || '').includes('盘上的会话')))
 }
 
+// ⭐ 1.1.8：绑定行自己的开关 —— 关掉就整个静音（不收也不发），不用删掉那一行
+{
+  writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+    总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000',
+    绑定: [{ 类型: '私聊', 号码: '789', 会话: 'session-X', 开: false }],
+  }, null, 2), 'utf8')
+  私聊消息人 = 789
+  私聊消息段 = null
+  私聊消息文本 = '关着的时候不该转进来'
+  私聊消息id = 9400
+  私聊消息时间 = Math.floor(Date.now() / 1000) + 900
+  const 前 = 转进的.length
+  await 轮询回调()
+  await new Promise((r) => setTimeout(r, 80))
+  报('关掉的绑定：消息不转进来', 转进的.length === 前, '转进 ' + (转进的.length - 前) + ' 条')
+
+  const 配置2 = JSON.parse(readFileSync(join(家, 'qq-bridge-config.json'), 'utf8'))
+  配置2.绑定 = [{ 类型: '私聊', 号码: '789', 会话: 'session-X', 开: true }]
+  writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify(配置2, null, 2), 'utf8')
+  私聊消息id = 9401
+  私聊消息时间 = Math.floor(Date.now() / 1000) + 920
+  await 轮询回调()
+  await new Promise((r) => setTimeout(r, 80))
+  报('勾回来以后照常转进来', 转进的.length === 前 + 1, '转进 ' + (转进的.length - 前) + ' 条')
+}
+
+// ⭐ 1.1.7：@ 要变成真的 at 段（OneBot 11 的 `at`），不再只是几个字
+{
+  const 拆 = 模.拆成消息段
+  const 段们 = 拆('你好 @123456789 看这个')
+  报('@数字号 → 真的 at 段', 段们.some((x) => x.type === 'at' && x.data.qq === '123456789'), JSON.stringify(段们))
+  报('at 前后的文字还在，并且拼成一段', 段们.filter((x) => x.type === 'text').length === 2
+    && String(段们[0].data.text).includes('你好'), JSON.stringify(段们))
+  报('默认不许 @ 全体（怕炸群）', !拆('@全体成员 开会了').some((x) => x.type === 'at' && x.data.qq === 'all'), '')
+  报('打开了才认 @ 全体', 拆('@全体成员 开会了', { 允许全体: true }).some((x) => x.type === 'at' && x.data.qq === 'all'), '')
+  const 按名 = (名) => (名 === '阿甲' ? '10001' : '')
+  报('@昵称 能在成员表里换成号', 拆('@阿甲 你来', { 按名字: 按名 }).some((x) => x.type === 'at' && x.data.qq === '10001'), '')
+  报('找不到的昵称保持普通文字（不乱 @ 人）', 拆('@查无此人 你在吗', { 按名字: 按名 }).every((x) => x.type !== 'at'), '')
+  报('没有 @ 的照样只有一段文本', 拆('普通一句话').length === 1 && 拆('普通一句话')[0].type === 'text', '')
+}
+
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1

@@ -279,6 +279,19 @@ await check('group reply probability 100 keeps every batch', async f => {
   assert.equal(a.calls.length, 1)
 }, { group: true, config: { 合并窗口秒: 0, 回复冷却秒: 0, 回复概率: 100 } })
 
+// ⭐ 1.1.7：@ 它的批次也要过「两条之间至少隔 N 秒」的闸 —— 以前直接穿过去，等于没有冷却
+await check('@ 它的消息也受冷却约束：连来两条，第二条要等', async f => {
+  f.messages([f.message(1, { age: 2, segments: [{ type: 'at', data: { qq: '10001' } }, { type: 'text', data: { text: '一号' } }] })])
+  const a = f.mount(); await a.tick(); await settle()
+  const 第一条 = a.calls.length
+  f.messages([f.message(1, { age: 2, segments: [{ type: 'at', data: { qq: '10001' } }, { type: 'text', data: { text: '一号' } }] }),
+    f.message(2, { age: 1, segments: [{ type: 'at', data: { qq: '10001' } }, { type: 'text', data: { text: '二号' } }] })])
+  await a.tick(); await settle()
+  assert.equal(第一条, 1)
+  assert.equal(a.calls.length, 1)        // 冷却中：第二条还没出去
+  assert.ok(f.fastTimers().length >= 1)  // 排着队，到点会再来
+}, { group: true, config: { 合并窗口秒: 0, 回复冷却秒: 30, 每分钟最多条: 99, 回复概率: 100, 群里听所有人: true } })
+
 // ⭐ 1.1.3：@ / 引用 的批次 —— 「点名必回」开着不掷骰子，关掉就照样掷
 await check('点名必回开着：@ 它的消息不看概率，一定回', async f => {
   f.messages([f.message(1, { age: 2, segments: [{ type: 'at', data: { qq: '10001' } }, { type: 'text', data: { text: '在吗' } }] })])
