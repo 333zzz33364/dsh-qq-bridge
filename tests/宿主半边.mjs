@@ -1167,6 +1167,32 @@ async function 重启拉取(水位值, 已转, id, time) {
 报('模拟重启：恢复水位后接收启动前尚未处理的新消息', await 重启拉取(重启时间 - 60, [9901], 9902, 重启时间 - 30) === 1)
 报('模拟重启：同水位时间的已转消息 ID 不重投', await 重启拉取(重启时间 + 60, [9903], 9903, 重启时间 + 60) === 0)
 报('模拟重启：水位前未登记 ID 的旧消息不重投', await 重启拉取(重启时间 + 60, [9903], 9904, 重启时间 + 59) === 0)
+// ⭐ 1.1.4：#18 「会话清单列不全」—— 没在标签页里打开过的会话，也要能从盘上读出来
+{
+  const { mkdirSync } = await import('node:fs')
+  const 会话目录 = join(家, 'storages', 'session_projcache', 'sessions')
+  mkdirSync(会话目录, { recursive: true })
+  // 一个普通会话（盘上有、内存里没有）
+  writeFileSync(join(会话目录, 'aaaa-1111.json'), JSON.stringify({
+    version: 1,
+    record: { identity: { cwd: '/x' }, rows: { title: { ver: 1, seq: 3, val: '盘上的会话' } } },
+  }), 'utf8')
+  // 一个子智能体会话（必须被滤掉）
+  writeFileSync(join(会话目录, 'bbbb-2222.json'), JSON.stringify({
+    version: 1,
+    record: { identity: {}, rows: { subagent: { val: { identity: { mode: 'continuable', label: '刷B站' } } } } },
+  }), 'utf8')
+  模.apply({ ...ctx, on: () => () => {}, webServer: { register: () => () => {} }, interval: () => () => {} })
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  存储.length = 0
+  await 路由.get('/dsh-qq-bridge/state')([], fakeRes)
+  const 清单 = (存储[0] && (存储[0].活着的会话 || 存储[0].会话清单)) || []
+  const id们 = 清单.map((x) => x.值 || x.id || x.会话)
+  报('会话清单读得到「盘上有、内存里没有」的会话', id们.includes('aaaa-1111'))
+  报('会话清单滤掉了子智能体会话', !id们.includes('bbbb-2222'))
+  报('盘上那个会话的标题也读出来了', 清单.some((x) => String(x.标题 || x.名 || '').includes('盘上的会话')))
+}
+
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
