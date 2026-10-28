@@ -1258,6 +1258,32 @@ async function 重启拉取(水位值, 已转, id, time) {
   报('没有 @ 的照样只有一段文本', 拆('普通一句话').length === 1 && 拆('普通一句话')[0].type === 'text', '')
 }
 
+// ⭐ 1.2.0：私聊进来的话要不要标来源（默认关；开了才加）
+{
+  const 试私聊 = async (署名值) => {
+    writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+      总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:3000', 私聊署名: 署名值, 合并窗口秒: 0,
+      绑定: [{ 类型: '私聊', 号码: '789', 会话: 'session-X' }],
+    }, null, 2), 'utf8')
+    私聊消息人 = 789
+    私聊消息段 = null
+    私聊消息文本 = '从手机发的话'
+    const 序 = Math.floor(Date.now() % 1000)
+    私聊消息id = 9600 + 序
+    私聊消息时间 = Math.floor(Date.now() / 1000) + 1000
+    const 前 = 转进的.length
+    await 轮询回调()
+    await new Promise((r) => setTimeout(r, 80))
+    return String(转进的.at(-1)?.content?.[0]?.text || '')
+  }
+  const 原 = await 试私聊('关')
+  报('私聊默认不标来源（原样一行）', 原.includes('从手机发的话') && !原.includes('[QQ]') && !/：从手机发的话/.test(原), 原)
+  const 前2 = await 试私聊('前缀')
+  报('开了「前缀」：开头是 [QQ]', 前2.startsWith('[QQ] ') && 前2.includes('从手机发的话'), 前2)
+  const 署 = await 试私聊('署名')
+  报('开了「署名」：带上昵称', /：从手机发的话/.test(署) && 署.includes('从手机发的话'), 署)
+}
+
 rmSync(家, { recursive: true, force: true, maxRetries: 3 })
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1
