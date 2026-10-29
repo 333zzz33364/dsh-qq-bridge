@@ -259,7 +259,11 @@ let 收到 = await 收({ text: '宝宝你在吗' })
 报('/receive：把她的话 followup 进会话', 收到 && 收到.ok === true && 转进的.length === 1, JSON.stringify(收到))
 if (转进的[0]) {
   const m = 转进的[0]
-  报('/receive 消息形状：role=user + source.kind=qq + 正文对', m.role === 'user' && m.source && m.source.kind === 'qq' && m.content[0].text === '宝宝你在吗', JSON.stringify(m))
+  const 文 = String(m.content[0].text || '')
+  报('/receive 消息形状：role=user + source.kind=qq + 正文对',
+    m.role === 'user' && m.source && m.source.kind === 'qq'
+      && 文.includes('宝宝你在吗') && 文.startsWith('【本机注入·不是QQ·不是主人】'), JSON.stringify(m))
+  报('/receive 的来源头说清了「不是主人」', 文.includes('不是主人') && !文.includes('【QQ私聊】'), 文.slice(0, 40))
 }
 报('/receive 之后 DSH→QQ 那半也会把伙伴的回话发回 QQ（联动靠 session/event，不在这里再验）', true)
 
@@ -1283,7 +1287,7 @@ async function 重启拉取(水位值, 已转, id, time) {
   const 原 = await 试私聊('关')
   报('私聊默认不标来源（原样一行）', 原.includes('从手机发的话') && !原.includes('[QQ]') && !/：从手机发的话/.test(原), 原)
   const 前2 = await 试私聊('前缀')
-  报('开了「前缀」：开头是 [QQ]', 前2.startsWith('[QQ] ') && 前2.includes('从手机发的话'), 前2)
+  报('开了「前缀」：正文里带 [QQ]', 前2.includes('[QQ] 从手机发的话'), 前2)
   const 署 = await 试私聊('署名')
   报('开了「署名」：昵称 + 号一起带', 署.includes('小鱿鱼（789）：从手机发的话'), 署)
 }
