@@ -393,7 +393,7 @@ await new Promise((r) => setTimeout(r, 30))
 await new Promise((r) => setTimeout(r, 30))
 报('群会话说完 → 只发群', 发了.length === 1 && 发了[0].url.endsWith('/send_group_msg'), 发了.map((x) => x.url).join(','))
 
-// ⑲ 同一间会话绑两条 → 只保留第一条（防止两个聊天挤进一间屋、回话时串）
+// ⑲ 同一间会话绑两条（私聊 + 群）→ **两边都发**（1.4.0 起支持）
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
   总开关: true, 试运行: false,
   绑定: [
@@ -406,7 +406,25 @@ writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
 监听[0](会话, 助手消息(22, 1, [块('text', '同一间屋')], false))
 监听[0](会话, 转完(22))
 await new Promise((r) => setTimeout(r, 30))
-报('同一间会话绑两条 → 只留第一条（不发第二条的群）', 发了.length === 1 && 发了[0].url.endsWith('/send_private_msg'), 发了.map((x) => x.url).join(','))
+报('同一间会话绑两条 → 私聊和群都发', 发了.length === 2
+  && 发了.some((x) => x.url.endsWith('/send_private_msg'))
+  && 发了.some((x) => x.url.endsWith('/send_group_msg')), 发了.map((x) => x.url).join(','))
+
+// ⑲b 其中一条被关掉 → 只发开着的那条（用群那间会话，别动 session-X 的状态）
+writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
+  总开关: true, 试运行: false,
+  绑定: [
+    { 类型: '群', 号码: '456', 会话: 'session-G', 称呼: '群里的人' },
+    { 类型: '群', 号码: '457', 会话: 'session-G', 称呼: '二号群', 开: false },
+  ],
+  NapCat: 'http://127.0.0.1:3000',
+}, null, 2), 'utf8')
+发了.length = 0
+监听[0](假群agent.session, 助手消息(23, 1, [块('text', '只发开着的那条')], false))
+监听[0](假群agent.session, 转完(23))
+await new Promise((r) => setTimeout(r, 30))
+报('同一间会话绑两个群、其中一个关掉 → 只发开着那个', 发了.length === 1
+  && String(发了[0].体.group_id) === '456', JSON.stringify(发了.map((x) => [x.url.slice(-12), x.体 && x.体.group_id])))
 
 // ⑳ 称呼分两套：私聊用「私聊称呼」，群里用「群称呼」（群里不止一个人）
 writeFileSync(join(家, 'qq-bridge-config.json'), JSON.stringify({
